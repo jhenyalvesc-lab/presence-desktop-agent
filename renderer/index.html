@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Presence Desktop Agent</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: -apple-system, "Segoe UI", sans-serif;
+        background: #0b1220;
+        color: #e2e8f0;
+      }
+      h1 {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #94a3b8;
+        margin: 0 0 20px;
+      }
+      .card {
+        background: #111a2e;
+        border: 1px solid #1e293b;
+        border-radius: 10px;
+        padding: 18px;
+        margin-bottom: 12px;
+      }
+      .code {
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: 0.15em;
+        text-align: center;
+        color: #2dd4bf;
+        margin: 12px 0;
+      }
+      .muted {
+        color: #64748b;
+        font-size: 12px;
+      }
+      button {
+        width: 100%;
+        padding: 10px;
+        border-radius: 8px;
+        border: none;
+        background: #2dd4bf;
+        color: #0b1220;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      #ping-result,
+      #pairing-status {
+        font-size: 13px;
+        margin-top: 10px;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Presence Desktop Agent</h1>
+
+    <div class="card" id="pairing-card">
+      <div id="pairing-idle">
+        <p class="muted">Este computador ainda não está pareado.</p>
+        <button id="start-pairing">Parear</button>
+      </div>
+      <div id="pairing-active" style="display: none">
+        <p class="muted">Digite este código em Settings → Desktop Agent no app do Presence:</p>
+        <div class="code" id="pairing-code">------</div>
+        <p class="muted" id="pairing-countdown"></p>
+      </div>
+      <div id="pairing-status"></div>
+    </div>
+
+    <div class="card" id="paired-card" style="display: none">
+      <p class="muted">Dispositivo pareado.</p>
+      <p id="device-id" style="font-size: 12px; word-break: break-all"></p>
+      <button id="ping">Ping</button>
+      <div id="ping-result"></div>
+    </div>
+
+    <script src="./renderer.js"></script>
+  </body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "presence-desktop-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Presence Desktop Agent — processo local (Electron/Node/TypeScript). Fase A: fundação + pareamento com o backend cloud.",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "electron": "^33.2.0",
+    "typescript": "^5.7.2"
+  }
+}
