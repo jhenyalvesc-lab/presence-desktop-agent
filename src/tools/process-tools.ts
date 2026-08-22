@@ -12,7 +12,7 @@ export interface ProcessInfo {
   name: string;
 }
 
-async function listProcesses(): Promise<ProcessInfo[]> {
+export async function listProcesses(): Promise<ProcessInfo[]> {
   if (process.platform === "win32") {
     const { stdout } = await execFileAsync("tasklist", ["/fo", "csv", "/nh"]);
     return stdout

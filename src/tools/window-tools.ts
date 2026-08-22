@@ -20,7 +20,7 @@ export interface WindowInfo {
   processId: number;
 }
 
-function listWindows(): WindowInfo[] {
+export function listWindows(): WindowInfo[] {
   return windowManager
     .getWindows()
     .filter((window) => window.isVisible())

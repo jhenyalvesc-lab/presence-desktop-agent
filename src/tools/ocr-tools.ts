@@ -17,7 +17,7 @@ import { withTimeout } from "./timeout";
 
 const OCR_TIMEOUT_MS = 30_000;
 
-async function ocrScreen(): Promise<{ text: string }> {
+export async function ocrScreen(): Promise<{ text: string }> {
   return withTimeout(runOcr(), OCR_TIMEOUT_MS, "ocr_screen");
 }
 

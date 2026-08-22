@@ -9,6 +9,9 @@ import "./ocr-tools";
 import "./file-tools";
 import "./input-tools";
 import "./notification-tools";
+import "./git-tools";
+import "./github-tools";
+import "./claude-code-tools";
 
 export { getTool, listTools, registerTool } from "./registry";
 export type { RiskTier, ToolDefinition } from "./types";
