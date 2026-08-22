@@ -21,6 +21,7 @@
     "@nut-tree-fork/nut-js": "^4.2.6",
     "@picovoice/porcupine-node": "^4.0.2",
     "@picovoice/pvrecorder-node": "^1.2.9",
+    "node-cron": "^4.6.0",
     "node-window-manager": "^2.2.4",
     "screenshot-desktop": "^1.15.6",
     "tesseract.js": "^7.0.0"

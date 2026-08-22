@@ -6,9 +6,10 @@
 // palmas, sobre o mesmo Audio Worker. Fase 10D: captura do comando
 // falado (STT) depois do gatilho. Fase 10E: Tool Registry + resolução
 // determinística de "abre X". Fase 10F: Permission Manager + Execution
-// Engine + confirmação + Audit Log local. Scheduler, WhatsApp, Claude
-// Code e o restante do roteiro (ver IMPLEMENTATION_STATE.md do
-// repositório principal) ficam para fases futuras.
+// Engine + confirmação + Audit Log local. Fase 10G: Scheduler +
+// Notification Manager. WhatsApp, Claude Code e o restante do roteiro
+// (ver IMPLEMENTATION_STATE.md do repositório principal) ficam para
+// fases futuras.
 
 import { app, ipcMain } from "electron";
 
@@ -20,12 +21,16 @@ import { setAutostart } from "./autostart";
 import { pingCloud } from "./cloud-client";
 import { onConfirmationRequested, respondToConfirmation } from "./confirmation-broker";
 import { loadDeviceCredential } from "./device-store";
+import { executeTool } from "./execution-engine";
 import { beginPairing, waitForApproval, type PairingOutcome } from "./pairing";
+import { getJobStatuses, onJobStatusChanged, scheduleJob } from "./scheduler";
 import { createTray } from "./tray";
 import { onCommandCaptured, onCommandResolution, onVoiceInteractionState, startVoiceInteractionListener } from "./voice-interaction";
 import { createMainWindow, getMainWindow, showMainWindow } from "./window";
 
 let pairingInFlight = false;
+
+const HEALTHCHECK_CRON = process.env["PRESENCE_HEALTHCHECK_CRON"] ?? "*/15 * * * *";
 
 void app.whenReady().then(() => {
   createMainWindow();
@@ -45,6 +50,24 @@ void app.whenReady().then(() => {
     getMainWindow()?.webContents.send("agent:confirmation-request", request);
   });
   onAuditEntry((entry) => getMainWindow()?.webContents.send("agent:audit-appended", entry));
+
+  // Primeira automação real do Scheduler: prova o disparo local
+  // reaproveitando o contrato de nuvem já existente (ping), sem
+  // inventar um endpoint novo. Sincronizar calendário/lembretes reais
+  // (Fase 9) exigiria um endpoint autenticado por dispositivo que
+  // ainda não existe — sinalizado nos docs, não fabricado aqui.
+  scheduleJob("cloud-healthcheck", HEALTHCHECK_CRON, async () => {
+    try {
+      await pingCloud();
+    } catch (error) {
+      await executeTool("show_notification", {
+        title: "Presence Desktop Agent",
+        body: "Não consegui falar com a nuvem do Presence agora.",
+      });
+      throw error;
+    }
+  });
+  onJobStatusChanged((status) => getMainWindow()?.webContents.send("agent:scheduler-status", status));
 });
 
 app.on("before-quit", () => stopAudioWorker());
@@ -90,3 +113,5 @@ ipcMain.on("agent:confirmation-response", (_event, id: string, approved: boolean
 });
 
 ipcMain.handle("agent:get-audit-log", () => getRecentAuditEntries());
+
+ipcMain.handle("agent:get-scheduler-status", () => getJobStatuses());

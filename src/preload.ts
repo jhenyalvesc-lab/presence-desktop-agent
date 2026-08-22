@@ -62,4 +62,8 @@ contextBridge.exposeInMainWorld("presenceAgent", {
   onAuditAppended: (callback: (entry: unknown) => void): void => {
     ipcRenderer.on("agent:audit-appended", (_event, payload) => callback(payload));
   },
+  getSchedulerStatus: (): Promise<unknown[]> => ipcRenderer.invoke("agent:get-scheduler-status"),
+  onSchedulerStatus: (callback: (status: unknown) => void): void => {
+    ipcRenderer.on("agent:scheduler-status", (_event, payload) => callback(payload));
+  },
 });

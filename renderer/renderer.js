@@ -26,6 +26,7 @@ const confirmationDescription = document.getElementById("confirmation-descriptio
 const confirmationApprove = document.getElementById("confirmation-approve");
 const confirmationDeny = document.getElementById("confirmation-deny");
 const auditLogEl = document.getElementById("audit-log");
+const schedulerStatusEl = document.getElementById("scheduler-status");
 
 const AUDIO_STATUS_LABELS = {
   idle: "iniciando...",
@@ -103,6 +104,21 @@ function renderAuditEntry(entry) {
 
 window.presenceAgent.onAuditAppended(renderAuditEntry);
 
+function renderJobStatus(status) {
+  let el = document.getElementById(`job-${status.id}`);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = `job-${status.id}`;
+    el.className = "audit-entry";
+    schedulerStatusEl.appendChild(el);
+  }
+  const last = status.lastRunAt ? `última: ${new Date(status.lastRunAt).toLocaleTimeString()} (${status.lastRunOk ? "ok" : `falhou — ${status.lastError}`})` : "ainda não rodou";
+  const next = status.nextRunAt ? `próxima: ${new Date(status.nextRunAt).toLocaleTimeString()}` : "";
+  el.textContent = `${status.id} (${status.cronExpression}) — ${last} — ${next}`;
+}
+
+window.presenceAgent.onSchedulerStatus(renderJobStatus);
+
 function showPaired(deviceId) {
   pairingCard.style.display = "none";
   pairedCard.style.display = "block";
@@ -172,4 +188,7 @@ pingButton.addEventListener("click", async () => {
 
   const auditLog = await window.presenceAgent.getAuditLog();
   for (const entry of auditLog) renderAuditEntry(entry);
+
+  const schedulerStatus = await window.presenceAgent.getSchedulerStatus();
+  for (const status of schedulerStatus) renderJobStatus(status);
 })();

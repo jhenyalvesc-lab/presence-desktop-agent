@@ -8,6 +8,7 @@ import "./screenshot-tools";
 import "./ocr-tools";
 import "./file-tools";
 import "./input-tools";
+import "./notification-tools";
 
 export { getTool, listTools, registerTool } from "./registry";
 export type { RiskTier, ToolDefinition } from "./types";
