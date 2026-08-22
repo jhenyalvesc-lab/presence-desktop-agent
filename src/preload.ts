@@ -49,4 +49,7 @@ contextBridge.exposeInMainWorld("presenceAgent", {
   onCommandCaptured: (callback: (event: { transcript: string }) => void): void => {
     ipcRenderer.on("agent:command-captured", (_event, payload) => callback(payload));
   },
+  onCommandResolved: (callback: (resolution: unknown) => void): void => {
+    ipcRenderer.on("agent:command-resolved", (_event, payload) => callback(payload));
+  },
 });

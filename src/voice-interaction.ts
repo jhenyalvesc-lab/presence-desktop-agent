@@ -1,23 +1,27 @@
-// Presence Desktop Agent — Fase 10D: Voice Mode / interação por comando.
+// Presence Desktop Agent — Voice Mode / interação por comando.
 //
 // Depois da wake word ("Presence", Fase 10B) ou das duas palmas (Fase
 // 10C), entra em modo de escuta e captura o comando falado via STT
-// (`stt-window.ts`). Nesta fatia, só CAPTURA e EXPÕE o texto do
-// comando pro Main/UI — executar o que foi pedido é escopo da Fase
-// 10E (Tool Registry), ainda não implementada; não antecipar isso
-// aqui.
+// (`stt-window.ts`, Fase 10D). O texto capturado é sempre exposto pro
+// Main/UI; além disso (Fase 10E), tenta resolvê-lo de forma
+// determinística contra o Tool Registry (`command-resolver.ts`) — só
+// "abre/abra X" por enquanto. Um comando que não bate não tenta
+// adivinhar: fica só como texto mostrado, nada é executado.
 
 import { onClapDetected, onWakeDetected } from "./audio-manager";
+import { resolveAndExecuteCommand, type CommandResolution } from "./command-resolver";
 import { captureVoiceCommand } from "./stt-window";
 
 export type VoiceInteractionState = "idle" | "listening" | "error";
 
 type StateListener = (state: VoiceInteractionState) => void;
 type CommandListener = (event: { transcript: string }) => void;
+type ResolutionListener = (resolution: CommandResolution) => void;
 
 let listening = false;
 const stateListeners = new Set<StateListener>();
 const commandListeners = new Set<CommandListener>();
+const resolutionListeners = new Set<ResolutionListener>();
 
 export function startVoiceInteractionListener(): void {
   onWakeDetected(() => void handleTrigger());
@@ -34,6 +38,11 @@ export function onCommandCaptured(listener: CommandListener): () => void {
   return () => commandListeners.delete(listener);
 }
 
+export function onCommandResolution(listener: ResolutionListener): () => void {
+  resolutionListeners.add(listener);
+  return () => resolutionListeners.delete(listener);
+}
+
 async function handleTrigger(): Promise<void> {
   if (listening) return; // já ouvindo um comando — ignora um segundo gatilho sobreposto
   listening = true;
@@ -43,6 +52,12 @@ async function handleTrigger(): Promise<void> {
 
   if (result.status === "ok" && result.transcript.trim().length > 0) {
     for (const listener of commandListeners) listener({ transcript: result.transcript });
+
+    const resolution = await resolveAndExecuteCommand(result.transcript);
+    if (resolution.matched) {
+      for (const listener of resolutionListeners) listener(resolution);
+    }
+
     setState("idle");
   } else {
     setState("error");

@@ -1,0 +1,14 @@
+[
+  {
+    "name": "vscode",
+    "displayName": "Visual Studio Code",
+    "executablePath": "C:\\Users\\SEU_USUARIO\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe",
+    "aliases": ["vscode", "vs code", "código", "editor de código"]
+  },
+  {
+    "name": "spotify",
+    "displayName": "Spotify",
+    "executablePath": "C:\\Users\\SEU_USUARIO\\AppData\\Roaming\\Spotify\\Spotify.exe",
+    "aliases": ["spotify", "música", "musica"]
+  }
+]

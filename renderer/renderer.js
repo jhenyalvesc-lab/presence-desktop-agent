@@ -57,6 +57,11 @@ window.presenceAgent.onVoiceState((state) => {
 window.presenceAgent.onCommandCaptured(({ transcript }) => {
   voiceLastCommandEl.textContent = `Último comando ouvido: "${transcript}"`;
 });
+window.presenceAgent.onCommandResolved((resolution) => {
+  if (!resolution.matched) return;
+  const outcome = resolution.ok ? `abriu ${resolution.label}` : `falhou ao abrir ${resolution.label} (${resolution.error})`;
+  voiceLastCommandEl.textContent += ` — ${outcome}`;
+});
 
 function showPaired(deviceId) {
   pairingCard.style.display = "none";
