@@ -52,4 +52,14 @@ contextBridge.exposeInMainWorld("presenceAgent", {
   onCommandResolved: (callback: (resolution: unknown) => void): void => {
     ipcRenderer.on("agent:command-resolved", (_event, payload) => callback(payload));
   },
+  onConfirmationRequest: (callback: (request: { id: string; toolName: string; description: string; riskTier: string }) => void): void => {
+    ipcRenderer.on("agent:confirmation-request", (_event, payload) => callback(payload));
+  },
+  respondToConfirmation: (id: string, approved: boolean): void => {
+    ipcRenderer.send("agent:confirmation-response", id, approved);
+  },
+  getAuditLog: (): Promise<unknown[]> => ipcRenderer.invoke("agent:get-audit-log"),
+  onAuditAppended: (callback: (entry: unknown) => void): void => {
+    ipcRenderer.on("agent:audit-appended", (_event, payload) => callback(payload));
+  },
 });

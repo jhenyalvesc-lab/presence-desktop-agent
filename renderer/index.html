@@ -61,10 +61,39 @@
         margin-top: 10px;
         white-space: pre-wrap;
       }
+      .button-row {
+        display: flex;
+        gap: 8px;
+      }
+      .button-row button {
+        width: auto;
+        flex: 1;
+      }
+      button.danger {
+        background: #334155;
+        color: #e2e8f0;
+      }
+      #confirmation-card {
+        border-color: #d97706;
+      }
+      .audit-entry {
+        font-size: 12px;
+        border-top: 1px solid #1e293b;
+        padding: 6px 0;
+      }
     </style>
   </head>
   <body>
     <h1>Presence Desktop Agent</h1>
+
+    <div class="card" id="confirmation-card" style="display: none">
+      <p class="muted">Confirmação necessária</p>
+      <p id="confirmation-description" style="font-size: 13px; margin: 6px 0 12px"></p>
+      <div class="button-row">
+        <button id="confirmation-approve">Aprovar</button>
+        <button id="confirmation-deny" class="danger">Negar</button>
+      </div>
+    </div>
 
     <div class="card" id="pairing-card">
       <div id="pairing-idle">
@@ -102,6 +131,11 @@
       <p class="muted">Interação por voz</p>
       <p id="voice-state" style="font-size: 13px; margin: 6px 0 0">ociosa</p>
       <p id="voice-last-command" class="muted" style="margin-top: 6px"></p>
+    </div>
+
+    <div class="card">
+      <p class="muted">Log de auditoria (local — últimas ações)</p>
+      <div id="audit-log"></div>
     </div>
 
     <script src="./renderer.js"></script>

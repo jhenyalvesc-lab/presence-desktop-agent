@@ -1,4 +1,4 @@
-// Presence Desktop Agent — Fase 10E: resolução determinística de
+// Presence Desktop Agent — Fase 10E/10F: resolução determinística de
 // comando simples (sem IA).
 //
 // Só cobre "abre/abrir/abra <app>" contra o App Registry por
@@ -6,9 +6,13 @@
 // resolvível por correspondência de alias, sem LLM. Qualquer coisa
 // que não bata cai fora sem tentar adivinhar; seleção de ferramenta
 // por linguagem livre fica pra uma fase futura (planner).
+//
+// Executa sempre via `execution-engine.ts` (Fase 10F) — nunca chama
+// `tool.run()` diretamente — pra passar pelo Permission Manager e pelo
+// Audit Log como qualquer outra execução.
 
+import { executeTool } from "./execution-engine";
 import { resolveAppByAlias } from "./tools/app-registry";
-import { getTool } from "./tools/registry";
 
 export type CommandResolution =
   | { matched: false }
@@ -25,19 +29,12 @@ export async function resolveAndExecuteCommand(transcript: string): Promise<Comm
   const app = resolveAppByAlias(appQuery);
   if (!app) return { matched: false };
 
-  const tool = getTool("open_app");
-  if (!tool) return { matched: false };
+  const outcome = await executeTool("open_app", { name: app.name });
 
-  try {
-    const result = await tool.run({ name: app.name });
-    return { matched: true, tool: "open_app", label: app.displayName, ok: true, result };
-  } catch (error) {
-    return {
-      matched: true,
-      tool: "open_app",
-      label: app.displayName,
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
+  if (outcome.ok) {
+    return { matched: true, tool: "open_app", label: app.displayName, ok: true, result: outcome.result };
   }
+
+  const error = outcome.reason === "denied" ? "confirmação negada" : (outcome.detail ?? outcome.reason);
+  return { matched: true, tool: "open_app", label: app.displayName, ok: false, error };
 }

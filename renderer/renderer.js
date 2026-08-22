@@ -21,6 +21,11 @@ const clapStatusEl = document.getElementById("clap-status");
 const clapLastEl = document.getElementById("clap-last");
 const voiceStateEl = document.getElementById("voice-state");
 const voiceLastCommandEl = document.getElementById("voice-last-command");
+const confirmationCard = document.getElementById("confirmation-card");
+const confirmationDescription = document.getElementById("confirmation-description");
+const confirmationApprove = document.getElementById("confirmation-approve");
+const confirmationDeny = document.getElementById("confirmation-deny");
+const auditLogEl = document.getElementById("audit-log");
 
 const AUDIO_STATUS_LABELS = {
   idle: "iniciando...",
@@ -62,6 +67,41 @@ window.presenceAgent.onCommandResolved((resolution) => {
   const outcome = resolution.ok ? `abriu ${resolution.label}` : `falhou ao abrir ${resolution.label} (${resolution.error})`;
   voiceLastCommandEl.textContent += ` — ${outcome}`;
 });
+
+let pendingConfirmationId = null;
+
+window.presenceAgent.onConfirmationRequest((request) => {
+  pendingConfirmationId = request.id;
+  confirmationDescription.textContent = `${request.description} (nível: ${request.riskTier})`;
+  confirmationCard.style.display = "block";
+});
+
+function respond(approved) {
+  if (!pendingConfirmationId) return;
+  window.presenceAgent.respondToConfirmation(pendingConfirmationId, approved);
+  pendingConfirmationId = null;
+  confirmationCard.style.display = "none";
+}
+
+confirmationApprove.addEventListener("click", () => respond(true));
+confirmationDeny.addEventListener("click", () => respond(false));
+
+const AUDIT_OUTCOME_LABELS = {
+  success: "sucesso",
+  denied: "negado",
+  error: "erro",
+  not_found: "ferramenta desconhecida",
+};
+
+function renderAuditEntry(entry) {
+  const el = document.createElement("div");
+  el.className = "audit-entry";
+  const time = new Date(entry.at).toLocaleTimeString();
+  el.textContent = `${time} — ${entry.tool} (${entry.riskTier}) — ${AUDIT_OUTCOME_LABELS[entry.outcome] ?? entry.outcome}`;
+  auditLogEl.prepend(el);
+}
+
+window.presenceAgent.onAuditAppended(renderAuditEntry);
 
 function showPaired(deviceId) {
   pairingCard.style.display = "none";
@@ -129,4 +169,7 @@ pingButton.addEventListener("click", async () => {
 
   const audioStatus = await window.presenceAgent.getAudioStatus();
   renderAudioStatus(audioStatus);
+
+  const auditLog = await window.presenceAgent.getAuditLog();
+  for (const entry of auditLog) renderAuditEntry(entry);
 })();

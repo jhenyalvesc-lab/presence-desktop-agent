@@ -5,23 +5,25 @@
 // Fase 10B: Audio Worker com Wake Word ("Presence"). Fase 10C: duas
 // palmas, sobre o mesmo Audio Worker. Fase 10D: captura do comando
 // falado (STT) depois do gatilho. Fase 10E: Tool Registry + resolução
-// determinística de "abre X". Permissões/confirmação (Fase 10F),
-// WhatsApp, Claude Code e o restante do roteiro (ver
-// IMPLEMENTATION_STATE.md do repositório principal) ficam para fases
-// futuras.
+// determinística de "abre X". Fase 10F: Permission Manager + Execution
+// Engine + confirmação + Audit Log local. Scheduler, WhatsApp, Claude
+// Code e o restante do roteiro (ver IMPLEMENTATION_STATE.md do
+// repositório principal) ficam para fases futuras.
 
 import { app, ipcMain } from "electron";
 
 import "./tools";
 
 import { getAudioStatus, onAudioStatus, onClapDetected, onWakeDetected, startAudioWorker, stopAudioWorker } from "./audio-manager";
+import { getRecentAuditEntries, onAuditEntry } from "./audit-log";
 import { setAutostart } from "./autostart";
 import { pingCloud } from "./cloud-client";
+import { onConfirmationRequested, respondToConfirmation } from "./confirmation-broker";
 import { loadDeviceCredential } from "./device-store";
 import { beginPairing, waitForApproval, type PairingOutcome } from "./pairing";
 import { createTray } from "./tray";
 import { onCommandCaptured, onCommandResolution, onVoiceInteractionState, startVoiceInteractionListener } from "./voice-interaction";
-import { createMainWindow, getMainWindow } from "./window";
+import { createMainWindow, getMainWindow, showMainWindow } from "./window";
 
 let pairingInFlight = false;
 
@@ -37,6 +39,12 @@ void app.whenReady().then(() => {
   onVoiceInteractionState((state) => getMainWindow()?.webContents.send("agent:voice-state", state));
   onCommandCaptured((event) => getMainWindow()?.webContents.send("agent:command-captured", event));
   onCommandResolution((resolution) => getMainWindow()?.webContents.send("agent:command-resolved", resolution));
+
+  onConfirmationRequested((request) => {
+    showMainWindow(); // uma ação precisando de confirmação sempre traz a janela pra frente — nunca fica escondida esperando resposta
+    getMainWindow()?.webContents.send("agent:confirmation-request", request);
+  });
+  onAuditEntry((entry) => getMainWindow()?.webContents.send("agent:audit-appended", entry));
 });
 
 app.on("before-quit", () => stopAudioWorker());
@@ -76,3 +84,9 @@ ipcMain.handle("agent:set-autostart", (_event, enabled: boolean) => {
   setAutostart(enabled);
   return { enabled };
 });
+
+ipcMain.on("agent:confirmation-response", (_event, id: string, approved: boolean) => {
+  respondToConfirmation(id, approved);
+});
+
+ipcMain.handle("agent:get-audit-log", () => getRecentAuditEntries());
