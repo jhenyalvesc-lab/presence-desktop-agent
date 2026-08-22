@@ -6,6 +6,7 @@
 import { app, Menu, nativeImage, Tray } from "electron";
 import path from "node:path";
 
+import { stopAudioWorker } from "./audio-manager";
 import { isAutostartEnabled, setAutostart } from "./autostart";
 import { showMainWindow } from "./window";
 
@@ -39,7 +40,13 @@ function refreshTrayMenu(): void {
         },
       },
       { type: "separator" },
-      { label: "Encerrar", click: () => app.exit(0) },
+      {
+        label: "Encerrar",
+        click: () => {
+          stopAudioWorker();
+          app.exit(0);
+        },
+      },
     ]),
   );
 }

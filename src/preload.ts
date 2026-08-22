@@ -14,6 +14,12 @@ export interface AgentStatus {
 
 export type PairingResult = { status: "ready"; deviceId: string } | { status: "expired" };
 
+export interface AudioStatus {
+  recorder: "idle" | "starting" | "listening" | "stopped" | "error";
+  wakeWord: "disabled" | "not_configured" | "listening" | "error";
+  detail?: string;
+}
+
 contextBridge.exposeInMainWorld("presenceAgent", {
   getStatus: (): Promise<AgentStatus> => ipcRenderer.invoke("agent:get-status"),
   startPairing: (): Promise<PairingResult> => ipcRenderer.invoke("agent:start-pairing"),
@@ -25,5 +31,12 @@ contextBridge.exposeInMainWorld("presenceAgent", {
   },
   onPairingTick: (callback: (secondsLeft: number) => void): void => {
     ipcRenderer.on("agent:pairing-tick", (_event, secondsLeft) => callback(secondsLeft));
+  },
+  getAudioStatus: (): Promise<AudioStatus> => ipcRenderer.invoke("agent:get-audio-status"),
+  onAudioStatus: (callback: (status: AudioStatus) => void): void => {
+    ipcRenderer.on("agent:audio-status", (_event, status) => callback(status));
+  },
+  onWakeDetected: (callback: (event: { at: string }) => void): void => {
+    ipcRenderer.on("agent:wake-detected", (_event, payload) => callback(payload));
   },
 });

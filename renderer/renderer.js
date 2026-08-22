@@ -15,6 +15,27 @@ const deviceIdEl = document.getElementById("device-id");
 const startPairingButton = document.getElementById("start-pairing");
 const pingButton = document.getElementById("ping");
 const pingResult = document.getElementById("ping-result");
+const audioStatusEl = document.getElementById("audio-status");
+const wakeLastEl = document.getElementById("wake-last");
+
+const AUDIO_STATUS_LABELS = {
+  idle: "iniciando...",
+  starting: "iniciando o microfone...",
+  listening: { not_configured: "microfone ativo — wake word não configurada", listening: 'ouvindo por "Presence"', error: "microfone ativo — wake word com erro" },
+  stopped: "parado",
+  error: "erro",
+};
+
+function renderAudioStatus(status) {
+  const recorderLabel = AUDIO_STATUS_LABELS[status.recorder];
+  const text = typeof recorderLabel === "object" ? recorderLabel[status.wakeWord] ?? recorderLabel.error : recorderLabel ?? status.recorder;
+  audioStatusEl.textContent = status.detail ? `${text} (${status.detail})` : text;
+}
+
+window.presenceAgent.onAudioStatus(renderAudioStatus);
+window.presenceAgent.onWakeDetected(({ at }) => {
+  wakeLastEl.textContent = `Última detecção: ${new Date(at).toLocaleTimeString()}`;
+});
 
 function showPaired(deviceId) {
   pairingCard.style.display = "none";
@@ -79,4 +100,7 @@ pingButton.addEventListener("click", async () => {
   } else {
     showUnpaired();
   }
+
+  const audioStatus = await window.presenceAgent.getAudioStatus();
+  renderAudioStatus(audioStatus);
 })();

@@ -13,5 +13,9 @@
     "@types/node": "^22.10.0",
     "electron": "^33.2.0",
     "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@picovoice/porcupine-node": "^4.0.2",
+    "@picovoice/pvrecorder-node": "^1.2.9"
   }
 }

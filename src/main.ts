@@ -1,14 +1,15 @@
-// Presence Desktop Agent — Fase A: fundação + pareamento de dispositivo.
+// Presence Desktop Agent — Main Process.
 //
-// Escopo desta fatia (aprovado explicitamente pela Jheny): só Main
-// Process, Tray, autostart, janela que esconde em vez de fechar,
-// pareamento com o backend cloud e um ping de prova. Wake word, duas
+// Fase A (aprovada): Main Process, Tray, autostart, janela que esconde
+// em vez de fechar, pareamento com o backend cloud e um ping de prova.
+// Fase 10B (esta fatia): Audio Worker com Wake Word ("Presence"). Duas
 // palmas, controle do computador, WhatsApp, Claude Code e o restante do
 // roteiro (ver IMPLEMENTATION_STATE.md do repositório principal) ficam
-// para fases futuras, cada uma com sua própria aprovação.
+// para fases futuras.
 
 import { app, ipcMain } from "electron";
 
+import { getAudioStatus, onAudioStatus, onWakeDetected, startAudioWorker, stopAudioWorker } from "./audio-manager";
 import { setAutostart } from "./autostart";
 import { pingCloud } from "./cloud-client";
 import { loadDeviceCredential } from "./device-store";
@@ -21,7 +22,13 @@ let pairingInFlight = false;
 void app.whenReady().then(() => {
   createMainWindow();
   createTray();
+  startAudioWorker();
+
+  onAudioStatus((status) => getMainWindow()?.webContents.send("agent:audio-status", status));
+  onWakeDetected((event) => getMainWindow()?.webContents.send("agent:wake-detected", event));
 });
+
+app.on("before-quit", () => stopAudioWorker());
 
 // Fechar a janela nunca encerra o agente (ver window.ts); no Windows,
 // "todas as janelas fechadas" também não deve encerrar o processo — só a
@@ -51,6 +58,8 @@ ipcMain.handle("agent:start-pairing", async (): Promise<PairingOutcome> => {
 });
 
 ipcMain.handle("agent:ping", () => pingCloud());
+
+ipcMain.handle("agent:get-audio-status", () => getAudioStatus());
 
 ipcMain.handle("agent:set-autostart", (_event, enabled: boolean) => {
   setAutostart(enabled);
