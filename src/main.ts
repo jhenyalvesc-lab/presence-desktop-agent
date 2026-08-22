@@ -19,6 +19,7 @@ import { getAudioStatus, onAudioStatus, onClapDetected, onWakeDetected, startAud
 import { getRecentAuditEntries, onAuditEntry } from "./audit-log";
 import { setAutostart } from "./autostart";
 import { pingCloud } from "./cloud-client";
+import { onCommandCompleted, onCommandQueueStatus, onCommandReceived, startCommandQueuePolling, stopCommandQueuePolling } from "./command-queue";
 import { onConfirmationRequested, respondToConfirmation } from "./confirmation-broker";
 import { loadDeviceCredential } from "./device-store";
 import { executeTool } from "./execution-engine";
@@ -31,12 +32,14 @@ import { createMainWindow, getMainWindow, showMainWindow } from "./window";
 let pairingInFlight = false;
 
 const HEALTHCHECK_CRON = process.env["PRESENCE_HEALTHCHECK_CRON"] ?? "*/15 * * * *";
+const COMMAND_POLL_INTERVAL_MS = Number(process.env["PRESENCE_COMMAND_POLL_INTERVAL_MS"] ?? "4000");
 
 void app.whenReady().then(() => {
   createMainWindow();
   createTray();
   startAudioWorker();
   startVoiceInteractionListener();
+  startCommandQueuePolling(COMMAND_POLL_INTERVAL_MS);
 
   onAudioStatus((status) => getMainWindow()?.webContents.send("agent:audio-status", status));
   onWakeDetected((event) => getMainWindow()?.webContents.send("agent:wake-detected", event));
@@ -44,6 +47,10 @@ void app.whenReady().then(() => {
   onVoiceInteractionState((state) => getMainWindow()?.webContents.send("agent:voice-state", state));
   onCommandCaptured((event) => getMainWindow()?.webContents.send("agent:command-captured", event));
   onCommandResolution((resolution) => getMainWindow()?.webContents.send("agent:command-resolved", resolution));
+
+  onCommandQueueStatus((status, detail) => getMainWindow()?.webContents.send("agent:command-queue-status", { status, detail }));
+  onCommandReceived((event) => getMainWindow()?.webContents.send("agent:command-queue-received", event));
+  onCommandCompleted((event) => getMainWindow()?.webContents.send("agent:command-queue-completed", event));
 
   onConfirmationRequested((request) => {
     showMainWindow(); // uma ação precisando de confirmação sempre traz a janela pra frente — nunca fica escondida esperando resposta
@@ -70,7 +77,10 @@ void app.whenReady().then(() => {
   onJobStatusChanged((status) => getMainWindow()?.webContents.send("agent:scheduler-status", status));
 });
 
-app.on("before-quit", () => stopAudioWorker());
+app.on("before-quit", () => {
+  stopAudioWorker();
+  stopCommandQueuePolling();
+});
 
 // Fechar a janela nunca encerra o agente (ver window.ts); no Windows,
 // "todas as janelas fechadas" também não deve encerrar o processo — só a

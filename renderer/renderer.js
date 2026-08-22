@@ -27,6 +27,8 @@ const confirmationApprove = document.getElementById("confirmation-approve");
 const confirmationDeny = document.getElementById("confirmation-deny");
 const auditLogEl = document.getElementById("audit-log");
 const schedulerStatusEl = document.getElementById("scheduler-status");
+const commandQueueStatusEl = document.getElementById("command-queue-status");
+const commandQueueHistoryEl = document.getElementById("command-queue-history");
 
 const AUDIO_STATUS_LABELS = {
   idle: "iniciando...",
@@ -118,6 +120,31 @@ function renderJobStatus(status) {
 }
 
 window.presenceAgent.onSchedulerStatus(renderJobStatus);
+
+const COMMAND_QUEUE_STATUS_LABELS = {
+  idle: "ociosa (nada pendente)",
+  polling: "verificando a fila...",
+  error: "erro ao verificar a fila",
+};
+
+window.presenceAgent.onCommandQueueStatus(({ status, detail }) => {
+  const label = COMMAND_QUEUE_STATUS_LABELS[status] ?? status;
+  commandQueueStatusEl.textContent = detail ? `${label} (${detail})` : label;
+});
+
+window.presenceAgent.onCommandQueueReceived(({ text }) => {
+  const el = document.createElement("div");
+  el.className = "audit-entry";
+  el.textContent = `${new Date().toLocaleTimeString()} — comando recebido: "${text}"`;
+  commandQueueHistoryEl.prepend(el);
+});
+
+window.presenceAgent.onCommandQueueCompleted(({ text, status }) => {
+  const el = document.createElement("div");
+  el.className = "audit-entry";
+  el.textContent = `${new Date().toLocaleTimeString()} — "${text}" — ${status === "done" ? "concluído" : "falhou"}`;
+  commandQueueHistoryEl.prepend(el);
+});
 
 function showPaired(deviceId) {
   pairingCard.style.display = "none";

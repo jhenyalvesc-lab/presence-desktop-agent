@@ -66,4 +66,13 @@ contextBridge.exposeInMainWorld("presenceAgent", {
   onSchedulerStatus: (callback: (status: unknown) => void): void => {
     ipcRenderer.on("agent:scheduler-status", (_event, payload) => callback(payload));
   },
+  onCommandQueueStatus: (callback: (payload: { status: string; detail?: string }) => void): void => {
+    ipcRenderer.on("agent:command-queue-status", (_event, payload) => callback(payload));
+  },
+  onCommandQueueReceived: (callback: (event: { id: string; text: string }) => void): void => {
+    ipcRenderer.on("agent:command-queue-received", (_event, payload) => callback(payload));
+  },
+  onCommandQueueCompleted: (callback: (event: unknown) => void): void => {
+    ipcRenderer.on("agent:command-queue-completed", (_event, payload) => callback(payload));
+  },
 });
