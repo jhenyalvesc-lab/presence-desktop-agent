@@ -19,6 +19,8 @@ const audioStatusEl = document.getElementById("audio-status");
 const wakeLastEl = document.getElementById("wake-last");
 const clapStatusEl = document.getElementById("clap-status");
 const clapLastEl = document.getElementById("clap-last");
+const voiceStateEl = document.getElementById("voice-state");
+const voiceLastCommandEl = document.getElementById("voice-last-command");
 
 const AUDIO_STATUS_LABELS = {
   idle: "iniciando...",
@@ -41,6 +43,19 @@ window.presenceAgent.onWakeDetected(({ at }) => {
 });
 window.presenceAgent.onClapDetected(({ at }) => {
   clapLastEl.textContent = `Última detecção: ${new Date(at).toLocaleTimeString()}`;
+});
+
+const VOICE_STATE_LABELS = {
+  idle: "ociosa",
+  listening: "ouvindo o comando...",
+  error: "não entendi — tente de novo",
+};
+
+window.presenceAgent.onVoiceState((state) => {
+  voiceStateEl.textContent = VOICE_STATE_LABELS[state] ?? state;
+});
+window.presenceAgent.onCommandCaptured(({ transcript }) => {
+  voiceLastCommandEl.textContent = `Último comando ouvido: "${transcript}"`;
 });
 
 function showPaired(deviceId) {

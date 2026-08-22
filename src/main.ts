@@ -3,9 +3,11 @@
 // Fase A (aprovada): Main Process, Tray, autostart, janela que esconde
 // em vez de fechar, pareamento com o backend cloud e um ping de prova.
 // Fase 10B: Audio Worker com Wake Word ("Presence"). Fase 10C: duas
-// palmas, sobre o mesmo Audio Worker. Controle do computador, WhatsApp,
-// Claude Code e o restante do roteiro (ver IMPLEMENTATION_STATE.md do
-// repositório principal) ficam para fases futuras.
+// palmas, sobre o mesmo Audio Worker. Fase 10D: captura do comando
+// falado (STT) depois do gatilho. Execução de ações (Tool Registry),
+// WhatsApp, Claude Code e o restante do roteiro (ver
+// IMPLEMENTATION_STATE.md do repositório principal) ficam para fases
+// futuras.
 
 import { app, ipcMain } from "electron";
 
@@ -15,6 +17,7 @@ import { pingCloud } from "./cloud-client";
 import { loadDeviceCredential } from "./device-store";
 import { beginPairing, waitForApproval, type PairingOutcome } from "./pairing";
 import { createTray } from "./tray";
+import { onCommandCaptured, onVoiceInteractionState, startVoiceInteractionListener } from "./voice-interaction";
 import { createMainWindow, getMainWindow } from "./window";
 
 let pairingInFlight = false;
@@ -23,10 +26,13 @@ void app.whenReady().then(() => {
   createMainWindow();
   createTray();
   startAudioWorker();
+  startVoiceInteractionListener();
 
   onAudioStatus((status) => getMainWindow()?.webContents.send("agent:audio-status", status));
   onWakeDetected((event) => getMainWindow()?.webContents.send("agent:wake-detected", event));
   onClapDetected((event) => getMainWindow()?.webContents.send("agent:clap-detected", event));
+  onVoiceInteractionState((state) => getMainWindow()?.webContents.send("agent:voice-state", state));
+  onCommandCaptured((event) => getMainWindow()?.webContents.send("agent:command-captured", event));
 });
 
 app.on("before-quit", () => stopAudioWorker());

@@ -43,4 +43,10 @@ contextBridge.exposeInMainWorld("presenceAgent", {
   onClapDetected: (callback: (event: { at: string }) => void): void => {
     ipcRenderer.on("agent:clap-detected", (_event, payload) => callback(payload));
   },
+  onVoiceState: (callback: (state: "idle" | "listening" | "error") => void): void => {
+    ipcRenderer.on("agent:voice-state", (_event, state) => callback(state));
+  },
+  onCommandCaptured: (callback: (event: { transcript: string }) => void): void => {
+    ipcRenderer.on("agent:command-captured", (_event, payload) => callback(payload));
+  },
 });
