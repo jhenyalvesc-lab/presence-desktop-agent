@@ -2,14 +2,14 @@
 //
 // Fase A (aprovada): Main Process, Tray, autostart, janela que esconde
 // em vez de fechar, pareamento com o backend cloud e um ping de prova.
-// Fase 10B (esta fatia): Audio Worker com Wake Word ("Presence"). Duas
-// palmas, controle do computador, WhatsApp, Claude Code e o restante do
-// roteiro (ver IMPLEMENTATION_STATE.md do repositório principal) ficam
-// para fases futuras.
+// Fase 10B: Audio Worker com Wake Word ("Presence"). Fase 10C: duas
+// palmas, sobre o mesmo Audio Worker. Controle do computador, WhatsApp,
+// Claude Code e o restante do roteiro (ver IMPLEMENTATION_STATE.md do
+// repositório principal) ficam para fases futuras.
 
 import { app, ipcMain } from "electron";
 
-import { getAudioStatus, onAudioStatus, onWakeDetected, startAudioWorker, stopAudioWorker } from "./audio-manager";
+import { getAudioStatus, onAudioStatus, onClapDetected, onWakeDetected, startAudioWorker, stopAudioWorker } from "./audio-manager";
 import { setAutostart } from "./autostart";
 import { pingCloud } from "./cloud-client";
 import { loadDeviceCredential } from "./device-store";
@@ -26,6 +26,7 @@ void app.whenReady().then(() => {
 
   onAudioStatus((status) => getMainWindow()?.webContents.send("agent:audio-status", status));
   onWakeDetected((event) => getMainWindow()?.webContents.send("agent:wake-detected", event));
+  onClapDetected((event) => getMainWindow()?.webContents.send("agent:clap-detected", event));
 });
 
 app.on("before-quit", () => stopAudioWorker());

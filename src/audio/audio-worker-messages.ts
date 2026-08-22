@@ -4,9 +4,11 @@
 
 export type RecorderState = "starting" | "listening" | "stopped" | "error";
 export type WakeWordState = "not_configured" | "listening" | "error";
+export type ClapState = "disabled" | "listening";
 
 export type AudioWorkerToMain =
-  | { type: "status"; recorder: RecorderState; wakeWord: WakeWordState; detail?: string }
-  | { type: "wake_detected"; at: string };
+  | { type: "status"; recorder: RecorderState; wakeWord: WakeWordState; clap: ClapState; detail?: string }
+  | { type: "wake_detected"; at: string }
+  | { type: "clap_detected"; at: string };
 
 export type MainToAudioWorker = { type: "stop" };

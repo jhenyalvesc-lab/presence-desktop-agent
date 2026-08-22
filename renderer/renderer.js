@@ -17,6 +17,8 @@ const pingButton = document.getElementById("ping");
 const pingResult = document.getElementById("ping-result");
 const audioStatusEl = document.getElementById("audio-status");
 const wakeLastEl = document.getElementById("wake-last");
+const clapStatusEl = document.getElementById("clap-status");
+const clapLastEl = document.getElementById("clap-last");
 
 const AUDIO_STATUS_LABELS = {
   idle: "iniciando...",
@@ -30,11 +32,15 @@ function renderAudioStatus(status) {
   const recorderLabel = AUDIO_STATUS_LABELS[status.recorder];
   const text = typeof recorderLabel === "object" ? recorderLabel[status.wakeWord] ?? recorderLabel.error : recorderLabel ?? status.recorder;
   audioStatusEl.textContent = status.detail ? `${text} (${status.detail})` : text;
+  clapStatusEl.textContent = status.clap === "listening" ? "ouvindo por duas palmas" : "duas palmas desativadas (PRESENCE_CLAP_ENABLED=false)";
 }
 
 window.presenceAgent.onAudioStatus(renderAudioStatus);
 window.presenceAgent.onWakeDetected(({ at }) => {
   wakeLastEl.textContent = `Última detecção: ${new Date(at).toLocaleTimeString()}`;
+});
+window.presenceAgent.onClapDetected(({ at }) => {
+  clapLastEl.textContent = `Última detecção: ${new Date(at).toLocaleTimeString()}`;
 });
 
 function showPaired(deviceId) {

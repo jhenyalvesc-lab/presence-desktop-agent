@@ -17,6 +17,7 @@ export type PairingResult = { status: "ready"; deviceId: string } | { status: "e
 export interface AudioStatus {
   recorder: "idle" | "starting" | "listening" | "stopped" | "error";
   wakeWord: "disabled" | "not_configured" | "listening" | "error";
+  clap: "disabled" | "listening";
   detail?: string;
 }
 
@@ -38,5 +39,8 @@ contextBridge.exposeInMainWorld("presenceAgent", {
   },
   onWakeDetected: (callback: (event: { at: string }) => void): void => {
     ipcRenderer.on("agent:wake-detected", (_event, payload) => callback(payload));
+  },
+  onClapDetected: (callback: (event: { at: string }) => void): void => {
+    ipcRenderer.on("agent:clap-detected", (_event, payload) => callback(payload));
   },
 });
