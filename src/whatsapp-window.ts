@@ -31,6 +31,16 @@ import { BrowserWindow } from "electron";
 const WHATSAPP_URL = "https://web.whatsapp.com";
 const PARTITION = "persist:whatsapp";
 
+// Achado real (validação em máquina de usuária): o WhatsApp Web decide
+// se o navegador é suportado lendo o User-Agent — e o valor padrão do
+// Electron não é reconhecido como um Chrome válido, então a página
+// bloqueia com "atualize o Chrome" mesmo o Chromium interno sendo bem
+// mais novo que a exigência. Um User-Agent de Chrome real resolve —
+// mesma técnica usada por qualquer automação séria de WhatsApp Web
+// (ex. whatsapp-web.js).
+const CHROME_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
 // Reconexão com backoff — nunca insiste indefinidamente rápido (evita
 // martelar uma rede fora do ar ou uma sessão banida em loop apertado).
 const RELOAD_BACKOFF_MS = [5000, 10000, 20000, 40000, 60000];
@@ -82,6 +92,11 @@ export function getWhatsAppWindow(): BrowserWindow {
     },
   });
 
+  // `setUserAgent` (não uma opção do construtor — não existe uma) vale
+  // pra esta `webContents` inteira, inclusive reloads/reconexões
+  // futuras (`scheduleReload` abaixo) — não precisa ser repassado a
+  // cada `loadURL`.
+  window.webContents.setUserAgent(CHROME_USER_AGENT);
   void window.loadURL(WHATSAPP_URL);
 
   // Mesmo princípio de `window.ts`: fechar não encerra nada, só esconde.
