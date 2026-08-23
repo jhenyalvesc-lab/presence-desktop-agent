@@ -72,6 +72,7 @@ export interface PlannerStepOutcome {
   tool: string;
   label: string;
   ok: boolean;
+  result?: unknown;
   error?: string;
 }
 
@@ -129,7 +130,7 @@ export async function executePlanSteps(steps: PlanStep[]): Promise<PlannerStepOu
 
     const outcome = await executeTool(step.tool, args);
     if (outcome.ok) {
-      outcomes.push({ tool: step.tool, label: step.label, ok: true });
+      outcomes.push({ tool: step.tool, label: step.label, ok: true, result: outcome.result });
       continue;
     }
 
