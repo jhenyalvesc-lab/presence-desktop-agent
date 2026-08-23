@@ -78,4 +78,7 @@ contextBridge.exposeInMainWorld("presenceAgent", {
   onCommandQueueCompleted: (callback: (event: unknown) => void): void => {
     ipcRenderer.on("agent:command-queue-completed", (_event, payload) => callback(payload));
   },
+  whatsappShow: (): Promise<void> => ipcRenderer.invoke("agent:whatsapp-show"),
+  whatsappHide: (): Promise<void> => ipcRenderer.invoke("agent:whatsapp-hide"),
+  whatsappGetStatus: (): Promise<string> => ipcRenderer.invoke("agent:whatsapp-status"),
 });

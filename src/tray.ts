@@ -9,6 +9,7 @@ import path from "node:path";
 import { stopAudioWorker } from "./audio-manager";
 import { isAutostartEnabled, setAutostart } from "./autostart";
 import { showMainWindow } from "./window";
+import { showWhatsAppWindow } from "./whatsapp-window";
 
 let tray: Tray | null = null;
 
@@ -38,6 +39,11 @@ function refreshTrayMenu(): void {
           setAutostart(menuItem.checked);
           refreshTrayMenu();
         },
+      },
+      { type: "separator" },
+      {
+        label: "Conectar WhatsApp (opt-in, risco de ToS)",
+        click: () => showWhatsAppWindow(),
       },
       { type: "separator" },
       {

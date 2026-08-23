@@ -29,6 +29,9 @@ const auditLogEl = document.getElementById("audit-log");
 const schedulerStatusEl = document.getElementById("scheduler-status");
 const commandQueueStatusEl = document.getElementById("command-queue-status");
 const commandQueueHistoryEl = document.getElementById("command-queue-history");
+const whatsappStatusEl = document.getElementById("whatsapp-status");
+const whatsappConnectButton = document.getElementById("whatsapp-connect");
+const whatsappHideButton = document.getElementById("whatsapp-hide");
 
 const AUDIO_STATUS_LABELS = {
   idle: "iniciando...",
@@ -215,6 +218,32 @@ pingButton.addEventListener("click", async () => {
   }
 });
 
+const WHATSAPP_STATUS_LABELS = {
+  not_started: "não iniciado — clique em Conectar",
+  awaiting_qr_scan: "aguardando você escanear o QR code no celular",
+  connected: "conectado",
+  unknown: "status desconhecido (heurística não reconheceu a página)",
+};
+
+async function refreshWhatsAppStatus() {
+  const status = await window.presenceAgent.whatsappGetStatus();
+  whatsappStatusEl.textContent = WHATSAPP_STATUS_LABELS[status] ?? status;
+}
+
+whatsappConnectButton.addEventListener("click", async () => {
+  await window.presenceAgent.whatsappShow();
+  await refreshWhatsAppStatus();
+});
+
+whatsappHideButton.addEventListener("click", async () => {
+  await window.presenceAgent.whatsappHide();
+});
+
+// Enquanto a janela do WhatsApp está aberta, o status pode mudar sem
+// nenhuma ação nesta janela (a pessoa escaneou o QR code no celular) —
+// por isso um polling simples, só nesta tela, nunca no Main Process.
+setInterval(() => void refreshWhatsAppStatus(), 5000);
+
 (async () => {
   const status = await window.presenceAgent.getStatus();
   if (status.paired) {
@@ -231,4 +260,6 @@ pingButton.addEventListener("click", async () => {
 
   const schedulerStatus = await window.presenceAgent.getSchedulerStatus();
   for (const status of schedulerStatus) renderJobStatus(status);
+
+  await refreshWhatsAppStatus();
 })();

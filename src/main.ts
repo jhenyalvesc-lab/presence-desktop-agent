@@ -27,6 +27,7 @@ import { beginPairing, waitForApproval, type PairingOutcome } from "./pairing";
 import { getJobStatuses, onJobStatusChanged, scheduleJob } from "./scheduler";
 import { createTray } from "./tray";
 import { onCommandCaptured, onCommandResolution, onPlannerResolution, onVoiceInteractionState, startVoiceInteractionListener } from "./voice-interaction";
+import { getWhatsAppConnectionStatus, hideWhatsAppWindow, showWhatsAppWindow } from "./whatsapp-window";
 import { createMainWindow, getMainWindow, showMainWindow } from "./window";
 
 let pairingInFlight = false;
@@ -126,3 +127,9 @@ ipcMain.on("agent:confirmation-response", (_event, id: string, approved: boolean
 ipcMain.handle("agent:get-audit-log", () => getRecentAuditEntries());
 
 ipcMain.handle("agent:get-scheduler-status", () => getJobStatuses());
+
+// WhatsApp (roteiro original, "Fase J") — opt-in explícito, risco de
+// ToS aceito conscientemente pela Jheny antes desta implementação.
+ipcMain.handle("agent:whatsapp-show", () => showWhatsAppWindow());
+ipcMain.handle("agent:whatsapp-hide", () => hideWhatsAppWindow());
+ipcMain.handle("agent:whatsapp-status", () => getWhatsAppConnectionStatus());
