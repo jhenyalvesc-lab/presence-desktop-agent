@@ -132,3 +132,29 @@ export async function requestPlan(command: string, tools: PlanToolDescriptor[]):
   if (!response.ok) throw new Error(`presence-agent/plan-failed-${response.status}`);
   return (await response.json()) as PlanResponse;
 }
+
+export interface AuditEntryPayload {
+  tool: string;
+  args?: unknown;
+  riskTier: string;
+  confirmationOutcome: string;
+  outcome: string;
+  detail?: string;
+}
+
+/**
+ * Sincroniza uma entrada do Audit Log local (`audit-log.ts`) pra nuvem
+ * (`agent_audit_log`, Fase 10, roteiro original "Fase I"). Quem chama
+ * isto trata como best-effort — nunca deixa uma falha aqui (sem
+ * pareamento, rede indisponível, etc.) derrubar a execução real da
+ * ferramenta; o log local continua sendo a fonte de verdade.
+ */
+export async function sendAuditEntry(entry: AuditEntryPayload): Promise<void> {
+  const headers = await authHeader();
+  const response = await fetch(`${CLOUD_BASE_URL}/api/presence/agent/audit`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify(entry),
+  });
+  if (!response.ok) throw new Error(`presence-agent/audit-sync-failed-${response.status}`);
+}
