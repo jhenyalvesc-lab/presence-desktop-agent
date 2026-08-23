@@ -17,9 +17,15 @@ import { Button, keyboard, mouse, Point } from "@nut-tree-fork/nut-js";
 import { loadAppRegistry } from "./app-registry";
 import { registerTool } from "./registry";
 
-function openApp(args: { name: string }): Promise<{ opened: boolean; pid?: number }> {
+function openApp(args: { name: string }): Promise<{ opened: true; pid?: number }> {
   const entry = loadAppRegistry().find((candidate) => candidate.name === args.name);
-  if (!entry) return Promise.resolve({ opened: false });
+  // Achado real (validação em máquina de usuária): antes, um app não
+  // cadastrado devolvia `{ opened: false }` sem lançar erro — o
+  // Execution Engine só volta `ok: false` quando a ferramenta REJEITA,
+  // então esse "falso sucesso silencioso" subia como `ok: true` até o
+  // comando aparecer "concluído" na fila mesmo sem abrir nada. Rejeitar
+  // aqui é o que faz a falha real aparecer como falha real.
+  if (!entry) return Promise.reject(new Error(`app "${args.name}" não está cadastrado no App Registry`));
 
   const child = spawn(entry.executablePath, entry.args ?? [], { detached: true, stdio: "ignore" });
   child.unref();
