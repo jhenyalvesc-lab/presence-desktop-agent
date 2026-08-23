@@ -4,15 +4,15 @@
 //
 // **Aviso de honestidade, o mesmo já usado em `claude_code_confirmation_check`
 // (Fase 10H) e em `getWhatsAppConnectionStatus`**: os seletores de DOM
-// abaixo (`data-testid`, classes `message-in`/`message-out`, os dois
-// `contenteditable` de busca/composição) são inferidos de padrões
-// publicamente conhecidos e historicamente estáveis do WhatsApp Web —
-// nunca foram confirmados contra uma sessão real, porque este sandbox
-// não alcança `web.whatsapp.com` (rede bloqueada, confirmado via `curl`)
-// nem tem uma conta pra escanear um QR code de verdade. A Meta pode
-// mudar esse DOM a qualquer momento sem aviso. Bem provável que
-// precisem de ajuste no primeiro teste real — registrado como
-// pendência real, não escondido.
+// abaixo (`data-testid`, classes `message-in`/`message-out`, a caixa de
+// composição) ainda são inferidos de padrões publicamente conhecidos —
+// só a caixa de busca foi confirmada contra uma sessão real (inspecionada
+// via DevTools numa validação real com a Jheny, 23/08/2026: é um
+// `<input data-tab="3">`, não mais `div[contenteditable]` como o padrão
+// histórico assumia — corrigido em `typeIntoField`/nos seletores de
+// `searchChats`/`openChatInternal`). A Meta pode mudar esse DOM a
+// qualquer momento sem aviso, e o resto (composição/envio/leitura de
+// mensagens) segue não confirmado — pendência real, não escondida.
 //
 // Cada função devolve `{ ok: true, data }` ou `{ ok: false, error }` —
 // nunca lança por causa de um seletor não bater; quem chama (as
@@ -56,9 +56,20 @@ const ACTION_TIMEOUT_MS = 20000;
 // Helper injetado em toda ação: espera um elemento aparecer (poll
 // simples, sem MutationObserver — mais simples de raciocinar e
 // suficiente pro tempo de resposta do WhatsApp Web) e simula digitação
-// de verdade num contenteditable via `execCommand("insertText")` — um
-// `.value =`/`.textContent =` direto não dispara o `onInput` que apps
-// React (como o WhatsApp Web) precisam pra atualizar o estado interno.
+// de verdade num campo de texto.
+//
+// Achado real (validação em máquina de usuária, DevTools numa sessão
+// conectada de verdade): a caixa de busca do WhatsApp Web/Business, que
+// a arquitetura original assumia ser uma `div[contenteditable="true"]`
+// (padrão histórico), hoje é um `<input>` de verdade (`role="textbox"`,
+// `data-tab="3"`) — confirmado inspecionando o elemento real. Setar
+// `.value` direto não dispara o `onInput` que o React precisa pra
+// atualizar o estado; precisa do truque do setter nativo do protótipo +
+// um evento "input" sintético. `typeIntoField` detecta o tipo do
+// elemento e usa a técnica certa pra cada um, cobrindo tanto esse
+// `<input>` real quanto qualquer `contenteditable` que ainda exista em
+// outra parte da UI (ex. a caixa de composição de mensagem, ainda não
+// confirmada da mesma forma).
 const JS_HELPERS = `
   function waitFor(selector, timeoutMs) {
     return new Promise((resolve, reject) => {
@@ -71,11 +82,18 @@ const JS_HELPERS = `
       })();
     });
   }
-  function typeIntoContentEditable(el, text) {
+  function typeIntoField(el, text) {
     el.focus();
-    document.execCommand("selectAll", false, null);
-    document.execCommand("delete", false, null);
-    document.execCommand("insertText", false, text);
+    if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+      const proto = el.tagName === "INPUT" ? window.HTMLInputElement.prototype : window.HTMLTextAreaElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+      setter.call(el, text);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    } else {
+      document.execCommand("selectAll", false, null);
+      document.execCommand("delete", false, null);
+      document.execCommand("insertText", false, text);
+    }
   }
 `;
 
@@ -125,8 +143,8 @@ export async function listChats(limit = 20): Promise<WhatsAppActionResult<WhatsA
 export async function searchChats(query: string): Promise<WhatsAppActionResult<WhatsAppChatSummary[]>> {
   const escaped = JSON.stringify(query);
   return runInWhatsApp<WhatsAppChatSummary[]>(`
-    const searchBox = await waitFor('div[contenteditable="true"][data-tab="3"], div[title="Caixa de texto de pesquisa"]', ${READY_TIMEOUT_MS});
-    typeIntoContentEditable(searchBox, ${escaped});
+    const searchBox = await waitFor('input[data-tab="3"], div[contenteditable="true"][data-tab="3"], input[aria-label="Pesquisar ou começar uma nova conversa"]', ${READY_TIMEOUT_MS});
+    typeIntoField(searchBox, ${escaped});
     await new Promise((r) => setTimeout(r, 600));
     const rows = Array.from(document.querySelectorAll('div[role="listitem"], div[data-testid="cell-frame-container"]'));
     const chats = rows.map((row) => {
@@ -139,7 +157,7 @@ export async function searchChats(query: string): Promise<WhatsAppActionResult<W
       };
     }).filter((chat) => chat.name);
     // limpa a busca pra deixar o WhatsApp Web num estado navegável de novo
-    typeIntoContentEditable(searchBox, "");
+    typeIntoField(searchBox, "");
     return { ok: true, data: chats };
   `);
 }
@@ -148,12 +166,12 @@ export async function searchChats(query: string): Promise<WhatsAppActionResult<W
 async function openChatInternal(chatName: string): Promise<WhatsAppActionResult<{ opened: boolean }>> {
   const escaped = JSON.stringify(chatName);
   return runInWhatsApp<{ opened: boolean }>(`
-    const searchBox = await waitFor('div[contenteditable="true"][data-tab="3"], div[title="Caixa de texto de pesquisa"]', ${READY_TIMEOUT_MS});
-    typeIntoContentEditable(searchBox, ${escaped});
+    const searchBox = await waitFor('input[data-tab="3"], div[contenteditable="true"][data-tab="3"], input[aria-label="Pesquisar ou começar uma nova conversa"]', ${READY_TIMEOUT_MS});
+    typeIntoField(searchBox, ${escaped});
     await new Promise((r) => setTimeout(r, 600));
     const firstResult = document.querySelector('div[role="listitem"], div[data-testid="cell-frame-container"]');
     if (!firstResult) {
-      typeIntoContentEditable(searchBox, "");
+      typeIntoField(searchBox, "");
       return { ok: false, error: "nenhuma conversa encontrada pra \\"" + ${escaped} + "\\"" };
     }
     firstResult.click();
@@ -193,7 +211,7 @@ export async function sendMessage(chatName: string, text: string): Promise<Whats
   const escapedText = JSON.stringify(text);
   return runInWhatsApp<{ sent: boolean }>(`
     const composeBox = await waitFor('div[contenteditable="true"][data-tab="10"], footer div[contenteditable="true"]', ${READY_TIMEOUT_MS});
-    typeIntoContentEditable(composeBox, ${escapedText});
+    typeIntoField(composeBox, ${escapedText});
     await new Promise((r) => setTimeout(r, 200));
     const sendButton = document.querySelector('button[aria-label="Enviar"], span[data-icon="send"]');
     if (sendButton) {
