@@ -81,4 +81,7 @@ contextBridge.exposeInMainWorld("presenceAgent", {
   whatsappShow: (): Promise<void> => ipcRenderer.invoke("agent:whatsapp-show"),
   whatsappHide: (): Promise<void> => ipcRenderer.invoke("agent:whatsapp-hide"),
   whatsappGetStatus: (): Promise<string> => ipcRenderer.invoke("agent:whatsapp-status"),
+  onWhatsAppStatusChanged: (callback: (status: string) => void): void => {
+    ipcRenderer.on("agent:whatsapp-status-changed", (_event, status) => callback(status));
+  },
 });

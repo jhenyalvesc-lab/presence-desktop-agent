@@ -27,7 +27,14 @@ import { beginPairing, waitForApproval, type PairingOutcome } from "./pairing";
 import { getJobStatuses, onJobStatusChanged, scheduleJob } from "./scheduler";
 import { createTray } from "./tray";
 import { onCommandCaptured, onCommandResolution, onPlannerResolution, onVoiceInteractionState, startVoiceInteractionListener } from "./voice-interaction";
-import { getWhatsAppConnectionStatus, hideWhatsAppWindow, showWhatsAppWindow } from "./whatsapp-window";
+import {
+  getWhatsAppConnectionStatus,
+  hideWhatsAppWindow,
+  onWhatsAppStatusChanged,
+  showWhatsAppWindow,
+  startWhatsAppStatusWatcher,
+  stopWhatsAppStatusWatcher,
+} from "./whatsapp-window";
 import { createMainWindow, getMainWindow, showMainWindow } from "./window";
 
 let pairingInFlight = false;
@@ -77,11 +84,27 @@ void app.whenReady().then(() => {
     }
   });
   onJobStatusChanged((status) => getMainWindow()?.webContents.send("agent:scheduler-status", status));
+
+  // WhatsApp (Fase J): observa transições de status pra avisar quando a
+  // sessão cai — nunca tenta relogar sozinho (não há credencial que
+  // este código possa usar), só notifica pra a própria pessoa escanear
+  // o QR code de novo quando quiser.
+  startWhatsAppStatusWatcher();
+  onWhatsAppStatusChanged((status) => {
+    getMainWindow()?.webContents.send("agent:whatsapp-status-changed", status);
+    if (status === "disconnected") {
+      void executeTool("show_notification", {
+        title: "Presence — WhatsApp",
+        body: "O WhatsApp desconectou. Abra a janela do WhatsApp pra escanear o QR code de novo.",
+      });
+    }
+  });
 });
 
 app.on("before-quit", () => {
   stopAudioWorker();
   stopCommandQueuePolling();
+  stopWhatsAppStatusWatcher();
 });
 
 // Fechar a janela nunca encerra o agente (ver window.ts); no Windows,

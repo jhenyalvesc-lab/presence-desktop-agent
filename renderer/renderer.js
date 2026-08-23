@@ -220,15 +220,23 @@ pingButton.addEventListener("click", async () => {
 
 const WHATSAPP_STATUS_LABELS = {
   not_started: "não iniciado — clique em Conectar",
+  connecting: "carregando...",
   awaiting_qr_scan: "aguardando você escanear o QR code no celular",
   connected: "conectado",
+  disconnected: "desconectado — abra a janela pra escanear o QR code de novo",
   unknown: "status desconhecido (heurística não reconheceu a página)",
 };
 
-async function refreshWhatsAppStatus() {
-  const status = await window.presenceAgent.whatsappGetStatus();
+function renderWhatsAppStatus(status) {
   whatsappStatusEl.textContent = WHATSAPP_STATUS_LABELS[status] ?? status;
 }
+
+async function refreshWhatsAppStatus() {
+  const status = await window.presenceAgent.whatsappGetStatus();
+  renderWhatsAppStatus(status);
+}
+
+window.presenceAgent.onWhatsAppStatusChanged(renderWhatsAppStatus);
 
 whatsappConnectButton.addEventListener("click", async () => {
   await window.presenceAgent.whatsappShow();
