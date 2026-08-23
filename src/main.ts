@@ -26,7 +26,7 @@ import { executeTool } from "./execution-engine";
 import { beginPairing, waitForApproval, type PairingOutcome } from "./pairing";
 import { getJobStatuses, onJobStatusChanged, scheduleJob } from "./scheduler";
 import { createTray } from "./tray";
-import { onCommandCaptured, onCommandResolution, onVoiceInteractionState, startVoiceInteractionListener } from "./voice-interaction";
+import { onCommandCaptured, onCommandResolution, onPlannerResolution, onVoiceInteractionState, startVoiceInteractionListener } from "./voice-interaction";
 import { createMainWindow, getMainWindow, showMainWindow } from "./window";
 
 let pairingInFlight = false;
@@ -47,6 +47,7 @@ void app.whenReady().then(() => {
   onVoiceInteractionState((state) => getMainWindow()?.webContents.send("agent:voice-state", state));
   onCommandCaptured((event) => getMainWindow()?.webContents.send("agent:command-captured", event));
   onCommandResolution((resolution) => getMainWindow()?.webContents.send("agent:command-resolved", resolution));
+  onPlannerResolution((resolution) => getMainWindow()?.webContents.send("agent:planner-resolved", resolution));
 
   onCommandQueueStatus((status, detail) => getMainWindow()?.webContents.send("agent:command-queue-status", { status, detail }));
   onCommandReceived((event) => getMainWindow()?.webContents.send("agent:command-queue-received", event));

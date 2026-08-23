@@ -13,11 +13,14 @@
 // Manager, confirmação e Audit Log se aplicam igual, venha o comando de
 // onde vier) e a mesma credencial de dispositivo (`device-store.ts`).
 // Só faz polling quando pareado; nunca inventa um comando ou finge
-// sucesso quando a fila está vazia.
+// sucesso quando a fila está vazia. Quando o resolvedor determinístico
+// não bate com nada, cai pro Planner (`planner.ts`, Fase H) antes de
+// desistir — mesmo princípio Local-First/AI-on-demand.
 
 import { completeCommand, pollNextCommand } from "./cloud-client";
 import { resolveAndExecuteCommand, type CommandResolution } from "./command-resolver";
 import { loadDeviceCredential } from "./device-store";
+import { planAndExecuteCommand, type PlannerResolution } from "./planner";
 
 const DEFAULT_POLL_INTERVAL_MS = 4000;
 
@@ -32,7 +35,7 @@ interface CompletedEvent {
   id: string;
   text: string;
   status: "done" | "failed";
-  resolution: CommandResolution;
+  resolution: CommandResolution | PlannerResolution;
 }
 
 type StatusListener = (status: CommandQueueStatus, detail?: string) => void;
@@ -92,7 +95,13 @@ async function pollOnce(): Promise<void> {
 
     for (const listener of receivedListeners) listener({ id: command.id, text: command.text });
 
-    const resolution = await resolveAndExecuteCommand(command.text);
+    // Filtra localmente primeiro (Local-First/AI-on-demand): só recorre
+    // ao Planner (IA, Fase H) quando o resolvedor determinístico não
+    // bate com nada conhecido.
+    const deterministic = await resolveAndExecuteCommand(command.text);
+    const resolution: CommandResolution | PlannerResolution = deterministic.matched
+      ? deterministic
+      : await planAndExecuteCommand(command.text);
     const status = resolutionStatus(resolution);
     await completeCommand(command.id, status, resolution);
 
@@ -108,14 +117,15 @@ async function pollOnce(): Promise<void> {
 }
 
 /**
- * Um comando que não bate com nada conhecido (`resolveAndExecuteCommand`
- * devolve `matched: false`) é reportado como `failed` pra nuvem — nunca
- * fica preso em `delivered` pra sempre, mas também nunca finge que fez
- * algo que não fez.
+ * Um comando que não bate com nada conhecido, nem determinístico nem
+ * pelo Planner, é reportado como `failed` pra nuvem — nunca fica preso
+ * em `delivered` pra sempre, mas também nunca finge que fez algo que
+ * não fez.
  */
-function resolutionStatus(resolution: CommandResolution): "done" | "failed" {
-  if (!resolution.matched) return "failed";
-  return resolution.ok ? "done" : "failed";
+function resolutionStatus(resolution: CommandResolution | PlannerResolution): "done" | "failed" {
+  if ("matched" in resolution) return !resolution.matched ? "failed" : resolution.ok ? "done" : "failed";
+  if (resolution.status === "executed") return resolution.allSucceeded ? "done" : "failed";
+  return "failed";
 }
 
 function setStatus(status: CommandQueueStatus, detail?: string): void {

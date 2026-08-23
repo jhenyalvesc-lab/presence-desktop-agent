@@ -5,11 +5,14 @@
 // (`stt-window.ts`, Fase 10D). O texto capturado é sempre exposto pro
 // Main/UI; além disso (Fase 10E), tenta resolvê-lo de forma
 // determinística contra o Tool Registry (`command-resolver.ts`) — só
-// "abre/abra X" por enquanto. Um comando que não bate não tenta
-// adivinhar: fica só como texto mostrado, nada é executado.
+// "abre/abra X" por enquanto. Quando o determinístico não bate com
+// nada, cai pro Planner (`planner.ts`, Fase H) antes de desistir —
+// mesmo princípio Local-First/AI-on-demand: filtra localmente primeiro,
+// só recorre à IA depois.
 
 import { onClapDetected, onWakeDetected } from "./audio-manager";
 import { resolveAndExecuteCommand, type CommandResolution } from "./command-resolver";
+import { planAndExecuteCommand, type PlannerResolution } from "./planner";
 import { captureVoiceCommand } from "./stt-window";
 
 export type VoiceInteractionState = "idle" | "listening" | "error";
@@ -17,11 +20,13 @@ export type VoiceInteractionState = "idle" | "listening" | "error";
 type StateListener = (state: VoiceInteractionState) => void;
 type CommandListener = (event: { transcript: string }) => void;
 type ResolutionListener = (resolution: CommandResolution) => void;
+type PlannerListener = (resolution: PlannerResolution) => void;
 
 let listening = false;
 const stateListeners = new Set<StateListener>();
 const commandListeners = new Set<CommandListener>();
 const resolutionListeners = new Set<ResolutionListener>();
+const plannerListeners = new Set<PlannerListener>();
 
 export function startVoiceInteractionListener(): void {
   onWakeDetected(() => void handleTrigger());
@@ -43,6 +48,11 @@ export function onCommandResolution(listener: ResolutionListener): () => void {
   return () => resolutionListeners.delete(listener);
 }
 
+export function onPlannerResolution(listener: PlannerListener): () => void {
+  plannerListeners.add(listener);
+  return () => plannerListeners.delete(listener);
+}
+
 async function handleTrigger(): Promise<void> {
   if (listening) return; // já ouvindo um comando — ignora um segundo gatilho sobreposto
   listening = true;
@@ -56,6 +66,11 @@ async function handleTrigger(): Promise<void> {
     const resolution = await resolveAndExecuteCommand(result.transcript);
     if (resolution.matched) {
       for (const listener of resolutionListeners) listener(resolution);
+    } else {
+      // Filtra localmente primeiro: só recorre ao Planner (IA, Fase H)
+      // depois que o resolvedor determinístico já não bateu com nada.
+      const plan = await planAndExecuteCommand(result.transcript);
+      for (const listener of plannerListeners) listener(plan);
     }
 
     setState("idle");

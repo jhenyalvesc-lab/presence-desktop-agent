@@ -95,3 +95,40 @@ export async function completeCommand(
   });
   if (!response.ok) throw new Error(`presence-agent/commands-complete-failed-${response.status}`);
 }
+
+export interface PlanToolDescriptor {
+  name: string;
+  description: string;
+  riskTier: string;
+  argsHint?: string;
+}
+
+export interface PlanStep {
+  tool: string;
+  argsJson: string;
+  label: string;
+}
+
+export interface PlanResponse {
+  steps: PlanStep[];
+  clarification: string | null;
+}
+
+/**
+ * Planner (Fase H) — pede ao backend pra decompor um comando composto
+ * numa sequência de passos, cada um usando só ferramentas que este
+ * agente de fato tem (`tools`, construído a partir do Tool Registry
+ * local). O backend NUNCA executa nada — só propõe; quem valida e
+ * executa de verdade é o próprio agente (`planner.ts`), passo a passo,
+ * pelo mesmo Execution Engine de sempre.
+ */
+export async function requestPlan(command: string, tools: PlanToolDescriptor[]): Promise<PlanResponse> {
+  const headers = await authHeader();
+  const response = await fetch(`${CLOUD_BASE_URL}/api/presence/agent/plan`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({ command, tools }),
+  });
+  if (!response.ok) throw new Error(`presence-agent/plan-failed-${response.status}`);
+  return (await response.json()) as PlanResponse;
+}

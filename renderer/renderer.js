@@ -71,6 +71,19 @@ window.presenceAgent.onCommandResolved((resolution) => {
   voiceLastCommandEl.textContent += ` — ${outcome}`;
 });
 
+window.presenceAgent.onPlannerResolved((resolution) => {
+  if (resolution.status === "no_plan") {
+    voiceLastCommandEl.textContent += ` — Planner: ${resolution.clarification}`;
+    return;
+  }
+  if (resolution.status === "error") {
+    voiceLastCommandEl.textContent += ` — Planner falhou: ${resolution.error}`;
+    return;
+  }
+  const summary = resolution.steps.map((step) => `${step.label}${step.ok ? "" : ` (falhou: ${step.error})`}`).join(", ");
+  voiceLastCommandEl.textContent += ` — Planner (${resolution.allSucceeded ? "concluído" : "parcial"}): ${summary}`;
+});
+
 let pendingConfirmationId = null;
 
 window.presenceAgent.onConfirmationRequest((request) => {
