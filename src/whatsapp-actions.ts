@@ -105,10 +105,6 @@ const JS_HELPERS = `
       document.execCommand("insertText", false, text);
     }
   }
-  function fieldIsEmpty(el) {
-    if (el.value !== undefined) return el.value === "";
-    return (el.textContent || "").trim() === "";
-  }
   // Poll de condição arbitrária — usado pra confirmar que uma ação teve
   // efeito real (ex. mensagem realmente saiu), não só que um clique/tecla
   // rodou sem lançar erro.
@@ -291,7 +287,24 @@ export async function sendMessage(chatName: string, text: string): Promise<Whats
     typeIntoField(composeBox, ${escapedText});
     await new Promise((r) => setTimeout(r, 200));
 
-    const bubblesBefore = document.querySelectorAll('div.message-out').length;
+    // Achado real (validação em máquina de usuária, 23/08/2026): a
+    // verificação anterior também aceitava a caixa de composição ficar
+    // vazia como prova de envio — mas o WhatsApp pode limpar essa caixa
+    // por conta própria (comportamento de UI) mesmo sem a mensagem ter
+    // saído de verdade; um teste real confirmou "sucesso" sem nada
+    // chegar na conversa. A ÚNICA prova aceita agora é uma bolha de
+    // mensagem enviada de verdade aparecendo na conversa ABERTA (não no
+    // documento inteiro — evita contar bolhas de outra conversa/estado
+    // antigo), com o texto batendo com o que foi digitado.
+    const conversationContainer =
+      document.querySelector('div[data-testid="conversation-panel-messages"], div[data-testid="conversation-panel-wrapper"]') || document;
+    const bubbleMatchesSentText = function (bubble) {
+      const textEl = bubble.querySelector('span.selectable-text, span[dir="ltr"]');
+      const bubbleText = textEl ? (textEl.textContent || '') : (bubble.textContent || '');
+      return bubbleText.indexOf(${escapedText}) !== -1;
+    };
+    const bubblesBefore = conversationContainer.querySelectorAll('div.message-out').length;
+
     const sendButton = document.querySelector('button[aria-label="Enviar"], span[data-icon="send"]');
     if (sendButton) {
       sendButton.click();
@@ -301,13 +314,14 @@ export async function sendMessage(chatName: string, text: string): Promise<Whats
 
     try {
       await waitForCondition(function () {
-        const bubblesAfter = document.querySelectorAll('div.message-out').length;
-        return bubblesAfter > bubblesBefore || fieldIsEmpty(composeBox);
+        const bubblesNow = Array.from(conversationContainer.querySelectorAll('div.message-out'));
+        if (bubblesNow.length <= bubblesBefore) return false;
+        return bubbleMatchesSentText(bubblesNow[bubblesNow.length - 1]);
       }, 8000);
     } catch (error) {
       return {
         ok: false,
-        error: "não foi possível confirmar o envio: a caixa de mensagem não esvaziou e nenhuma nova mensagem enviada apareceu na conversa",
+        error: "não foi possível confirmar o envio: nenhuma mensagem enviada com o texto esperado apareceu na conversa aberta",
       };
     }
 
