@@ -144,11 +144,16 @@ export function hideWhatsAppWindow(): void {
  * mesma honestidade já usada em `claude_code_confirmation_check` (Fase
  * 10H): a Meta pode mudar esses seletores a qualquer momento sem
  * aviso, quebrando esta detecção sem quebrar o WhatsApp Web em si.
- * **Nunca testado contra uma sessão real** — este sandbox não alcança
- * `web.whatsapp.com` (mesma limitação de rede de sempre) nem tem uma
- * conta de WhatsApp pra escanear um QR code de verdade. Só a mecânica
- * (`executeJavaScript` contra uma página que falhou ao carregar,
- * nunca travando/lançando) foi validada.
+ *
+ * Achado real (validação em máquina de usuária, 23/08/2026): a
+ * detecção de "connected" dependia só de `div[data-testid="chat-list"]`/
+ * `div#pane-side` — nenhum dos dois confirmado contra uma sessão real
+ * (mesma classe de suposição que já se mostrou errada pra caixa de
+ * busca, ver `whatsapp-actions.ts`). Adicionado `input[data-tab="3"]`
+ * como sinal extra de "connected" — esse seletor É confirmado de
+ * verdade (é a própria caixa de busca, inspecionada via DevTools numa
+ * sessão conectada) — pra reduzir falso "unknown"/"disconnected"
+ * quando só os seletores antigos não batem.
  */
 export async function getWhatsAppConnectionStatus(): Promise<WhatsAppConnectionStatus> {
   if (!whatsappWindow) return "not_started";
@@ -158,7 +163,7 @@ export async function getWhatsAppConnectionStatus(): Promise<WhatsAppConnectionS
     const result: unknown = await whatsappWindow.webContents.executeJavaScript(`
       (function () {
         if (document.querySelector('canvas[aria-label], div[data-testid="qrcode"]')) return "awaiting_qr_scan";
-        if (document.querySelector('div[data-testid="chat-list"], div#pane-side')) return "connected";
+        if (document.querySelector('div[data-testid="chat-list"], div#pane-side, input[data-tab="3"]')) return "connected";
         return "unknown";
       })();
     `);
@@ -171,6 +176,16 @@ export async function getWhatsAppConnectionStatus(): Promise<WhatsAppConnectionS
 
 let watcherTimer: ReturnType<typeof setInterval> | null = null;
 let lastKnownStatus: WhatsAppConnectionStatus = "not_started";
+let consecutiveUnknownWhileConnected = 0;
+
+// Achado real (validação em máquina de usuária, 23/08/2026): uma única
+// leitura "unknown" (ex. um re-render transitório do WhatsApp Web, uma
+// tela de sincronização passageira, um modal cobrindo a lista por um
+// instante) já derrubava o status pra "disconnected" e disparava
+// notificação — mesmo com a sessão de fato conectada o tempo todo.
+// Exige agora leituras "unknown" consecutivas antes de declarar
+// desconexão de verdade, tolerando um soluço isolado de render.
+const UNKNOWN_READINGS_BEFORE_DISCONNECTED = 2;
 
 /**
  * Observa transições de status (ex. "connected" → "awaiting_qr_scan",
@@ -186,6 +201,13 @@ export function startWhatsAppStatusWatcher(intervalMs = 15000): void {
   watcherTimer = setInterval(() => {
     if (!whatsappWindow) return;
     void getWhatsAppConnectionStatus().then((status) => {
+      if (status === "unknown" && lastKnownStatus === "connected") {
+        consecutiveUnknownWhileConnected += 1;
+        if (consecutiveUnknownWhileConnected < UNKNOWN_READINGS_BEFORE_DISCONNECTED) return; // tolera um soluço isolado
+      } else {
+        consecutiveUnknownWhileConnected = 0;
+      }
+
       const effective = status === "unknown" && lastKnownStatus === "connected" ? "disconnected" : status;
       if (effective === lastKnownStatus) return;
       lastKnownStatus = effective;

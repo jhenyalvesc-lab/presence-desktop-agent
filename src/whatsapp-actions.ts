@@ -95,6 +95,29 @@ const JS_HELPERS = `
       document.execCommand("insertText", false, text);
     }
   }
+  function fieldIsEmpty(el) {
+    if (el.value !== undefined) return el.value === "";
+    return (el.textContent || "").trim() === "";
+  }
+  // Poll de condição arbitrária — usado pra confirmar que uma ação teve
+  // efeito real (ex. mensagem realmente saiu), não só que um clique/tecla
+  // rodou sem lançar erro.
+  function waitForCondition(conditionFn, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      (function poll() {
+        let met = false;
+        try {
+          met = !!conditionFn();
+        } catch (error) {
+          met = false;
+        }
+        if (met) return resolve(true);
+        if (Date.now() - start > timeoutMs) return reject(new Error("timeout esperando confirmação"));
+        setTimeout(poll, ${POLL_INTERVAL_MS});
+      })();
+    });
+  }
 `;
 
 async function runInWhatsApp<T>(script: string): Promise<WhatsAppActionResult<T>> {
@@ -162,21 +185,40 @@ export async function searchChats(query: string): Promise<WhatsAppActionResult<W
   `);
 }
 
-/** Abre uma conversa pelo nome exato ou parcial (busca primeiro, clica no primeiro resultado). */
-async function openChatInternal(chatName: string): Promise<WhatsAppActionResult<{ opened: boolean }>> {
+/**
+ * Abre uma conversa pelo nome (busca primeiro).
+ *
+ * Achado real (validação em máquina de usuária, 23/08/2026): a versão
+ * anterior clicava cegamente no PRIMEIRO resultado da busca, sem
+ * conferir se o nome batia com o pedido — pra uma ação `external_comm`
+ * (enviar mensagem), isso é um risco real de mandar mensagem pra
+ * conversa errada sem ninguém perceber. Agora exige encontrar uma linha
+ * cujo nome bate (exato, ou parcial como segunda tentativa) com o nome
+ * pedido; se nenhuma bater, falha explicitamente em vez de adivinhar.
+ */
+async function openChatInternal(chatName: string): Promise<WhatsAppActionResult<{ opened: boolean; matchedName: string }>> {
   const escaped = JSON.stringify(chatName);
-  return runInWhatsApp<{ opened: boolean }>(`
+  return runInWhatsApp<{ opened: boolean; matchedName: string }>(`
     const searchBox = await waitFor('input[data-tab="3"], div[contenteditable="true"][data-tab="3"], input[aria-label="Pesquisar ou começar uma nova conversa"]', ${READY_TIMEOUT_MS});
     typeIntoField(searchBox, ${escaped});
     await new Promise((r) => setTimeout(r, 600));
-    const firstResult = document.querySelector('div[role="listitem"], div[data-testid="cell-frame-container"]');
-    if (!firstResult) {
+    const rows = Array.from(document.querySelectorAll('div[role="listitem"], div[data-testid="cell-frame-container"]'));
+    const named = rows.map((row) => {
+      const nameEl = row.querySelector('span[dir="auto"][title], span[title]');
+      const name = nameEl ? (nameEl.getAttribute('title') || nameEl.textContent || '') : '';
+      return { row: row, name: name };
+    }).filter((entry) => entry.name);
+    const target = (${escaped}).trim().toLowerCase();
+    const exact = named.find((entry) => entry.name.toLowerCase() === target);
+    const partial = named.find((entry) => entry.name.toLowerCase().includes(target));
+    const match = exact || partial;
+    if (!match) {
       typeIntoField(searchBox, "");
-      return { ok: false, error: "nenhuma conversa encontrada pra \\"" + ${escaped} + "\\"" };
+      return { ok: false, error: "nenhuma conversa chamada \\"" + ${escaped} + "\\" encontrada nos resultados da busca" };
     }
-    firstResult.click();
-    await waitFor('div[data-testid="conversation-panel-messages"], div[data-testid="conversation-panel-wrapper"]', ${READY_TIMEOUT_MS});
-    return { ok: true, data: { opened: true } };
+    match.row.click();
+    await waitFor('div[data-testid="conversation-panel-messages"], div[data-testid="conversation-panel-wrapper"], footer div[contenteditable="true"], footer input[type="text"]', ${READY_TIMEOUT_MS});
+    return { ok: true, data: { opened: true, matchedName: match.name } };
   `);
 }
 
@@ -203,22 +245,53 @@ export async function readMessages(chatName: string, limit = 20): Promise<WhatsA
   `);
 }
 
-/** Envia uma mensagem numa conversa (abre a conversa primeiro se ainda não estiver aberta). Passa SEMPRE pelo Permission Manager (Nível 2, external_comm) antes de chegar aqui — ver `tools/whatsapp-tools.ts`. */
+/**
+ * Envia uma mensagem numa conversa (abre a conversa primeiro se ainda
+ * não estiver aberta). Passa SEMPRE pelo Permission Manager (Nível 2,
+ * external_comm) antes de chegar aqui — ver `tools/whatsapp-tools.ts`.
+ *
+ * Achado real (validação em máquina de usuária, 23/08/2026): a versão
+ * anterior devolvia `{ sent: true }` só porque o clique no botão de
+ * enviar (ou o fallback de tecla Enter sintética) rodou sem lançar
+ * erro — nunca conferia se a mensagem realmente saiu. Um evento de
+ * teclado sintético (`isTrusted: false`) frequentemente não produz o
+ * mesmo efeito que uma tecla real num app como o WhatsApp Web, então
+ * "concluído" podia significar "o clique aconteceu", não "a mensagem
+ * foi enviada". Agora, depois do clique/tecla, confirma de verdade:
+ * espera a caixa de composição esvaziar OU uma nova bolha de mensagem
+ * enviada aparecer na conversa — só então retorna sucesso; do
+ * contrário, falha explicitamente com o motivo.
+ */
 export async function sendMessage(chatName: string, text: string): Promise<WhatsAppActionResult<{ sent: boolean }>> {
   const opened = await openChatInternal(chatName);
   if (!opened.ok) return opened;
 
   const escapedText = JSON.stringify(text);
   return runInWhatsApp<{ sent: boolean }>(`
-    const composeBox = await waitFor('div[contenteditable="true"][data-tab="10"], footer div[contenteditable="true"]', ${READY_TIMEOUT_MS});
+    const composeBox = await waitFor('div[contenteditable="true"][data-tab="10"], footer div[contenteditable="true"], footer input[type="text"]', ${READY_TIMEOUT_MS});
     typeIntoField(composeBox, ${escapedText});
     await new Promise((r) => setTimeout(r, 200));
+
+    const bubblesBefore = document.querySelectorAll('div.message-out').length;
     const sendButton = document.querySelector('button[aria-label="Enviar"], span[data-icon="send"]');
     if (sendButton) {
       sendButton.click();
     } else {
-      composeBox.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      composeBox.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
     }
+
+    try {
+      await waitForCondition(function () {
+        const bubblesAfter = document.querySelectorAll('div.message-out').length;
+        return bubblesAfter > bubblesBefore || fieldIsEmpty(composeBox);
+      }, 8000);
+    } catch (error) {
+      return {
+        ok: false,
+        error: "não foi possível confirmar o envio: a caixa de mensagem não esvaziou e nenhuma nova mensagem enviada apareceu na conversa",
+      };
+    }
+
     return { ok: true, data: { sent: true } };
   `);
 }
