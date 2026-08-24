@@ -47,6 +47,17 @@ const ARGS_HINTS: Record<string, string> = {
   git_diff: '{"cwd": "<diretório absoluto>"}',
   github_pr_status: '{"owner": "<dono>", "repo": "<repositório>", "number": <número>}',
   github_actions_status: '{"owner": "<dono>", "repo": "<repositório>", "branch": "<branch>"}',
+  // Achado real (validação em máquina de usuária, 23/08/2026): sem
+  // dica aqui, o Planner montou args com nomes de campo errados pra
+  // whatsapp_send_message (ex. algo diferente de "chatName"/"text"),
+  // fazendo o próprio texto "undefined" ser digitado na busca do
+  // WhatsApp Web. Ferramenta sem entrada em ARGS_HINTS não tem NENHUMA
+  // garantia de que o modelo acerte o nome exato do campo — precisa de
+  // dica explícita, igual as outras ferramentas abaixo.
+  whatsapp_list_chats: '{"limit": <número, opcional, padrão 20>}',
+  whatsapp_search_chats: '{"query": "<nome do contato ou grupo>"}',
+  whatsapp_read_messages: '{"chatName": "<nome exato do contato ou grupo>", "limit": <número, opcional, padrão 20>}',
+  whatsapp_send_message: '{"chatName": "<nome exato do contato ou grupo>", "text": "<texto da mensagem>"}',
 };
 
 function buildToolCatalog(): PlanToolDescriptor[] {

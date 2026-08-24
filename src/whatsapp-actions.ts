@@ -40,6 +40,16 @@ export interface WhatsAppMessage {
 
 export type WhatsAppActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
+// Achado real (validação em máquina de usuária, 23/08/2026): o Planner
+// já montou args com o nome de campo errado uma vez, e sem essa trava
+// isso vira "undefined" digitado de verdade na busca do WhatsApp Web —
+// nunca deve chegar até o navegador um valor que não seja uma string
+// não-vazia de verdade.
+function requireNonEmptyString(value: unknown, fieldName: string): WhatsAppActionResult<never> | null {
+  if (typeof value === "string" && value.trim().length > 0) return null;
+  return { ok: false, error: `argumento "${fieldName}" ausente ou inválido` };
+}
+
 const READY_TIMEOUT_MS = 15000;
 const POLL_INTERVAL_MS = 250;
 // Achado real descoberto durante a validação desta fase, mesma classe
@@ -164,6 +174,9 @@ export async function listChats(limit = 20): Promise<WhatsAppActionResult<WhatsA
 
 /** Busca conversas/contatos pelo nome — usa a própria busca do WhatsApp Web, depois lê a lista filtrada com a mesma lógica de `listChats`. */
 export async function searchChats(query: string): Promise<WhatsAppActionResult<WhatsAppChatSummary[]>> {
+  const invalid = requireNonEmptyString(query, "query");
+  if (invalid) return invalid;
+
   const escaped = JSON.stringify(query);
   return runInWhatsApp<WhatsAppChatSummary[]>(`
     const searchBox = await waitFor('input[data-tab="3"], div[contenteditable="true"][data-tab="3"], input[aria-label="Pesquisar ou começar uma nova conversa"]', ${READY_TIMEOUT_MS});
@@ -197,6 +210,9 @@ export async function searchChats(query: string): Promise<WhatsAppActionResult<W
  * pedido; se nenhuma bater, falha explicitamente em vez de adivinhar.
  */
 async function openChatInternal(chatName: string): Promise<WhatsAppActionResult<{ opened: boolean; matchedName: string }>> {
+  const invalid = requireNonEmptyString(chatName, "chatName");
+  if (invalid) return invalid;
+
   const escaped = JSON.stringify(chatName);
   return runInWhatsApp<{ opened: boolean; matchedName: string }>(`
     const searchBox = await waitFor('input[data-tab="3"], div[contenteditable="true"][data-tab="3"], input[aria-label="Pesquisar ou começar uma nova conversa"]', ${READY_TIMEOUT_MS});
@@ -263,6 +279,9 @@ export async function readMessages(chatName: string, limit = 20): Promise<WhatsA
  * contrário, falha explicitamente com o motivo.
  */
 export async function sendMessage(chatName: string, text: string): Promise<WhatsAppActionResult<{ sent: boolean }>> {
+  const invalidText = requireNonEmptyString(text, "text");
+  if (invalidText) return invalidText;
+
   const opened = await openChatInternal(chatName);
   if (!opened.ok) return opened;
 
