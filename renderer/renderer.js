@@ -252,6 +252,14 @@ whatsappHideButton.addEventListener("click", async () => {
 // por isso um polling simples, só nesta tela, nunca no Main Process.
 setInterval(() => void refreshWhatsAppStatus(), 5000);
 
+// Voz do Presence: o Main nunca toca áudio (não existe API pra isso no
+// Main Process do Electron) — só encaminha os bytes (mp3 em base64);
+// tocar de verdade acontece aqui, no Renderer, via <audio>.
+window.presenceAgent.onSpeechAudio((base64Mp3) => {
+  const audio = new Audio(`data:audio/mpeg;base64,${base64Mp3}`);
+  void audio.play();
+});
+
 (async () => {
   const status = await window.presenceAgent.getStatus();
   if (status.paired) {

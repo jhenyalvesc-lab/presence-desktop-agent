@@ -115,6 +115,13 @@ Processo local (Electron + Node/TypeScript) do Presence — Fase 10 do backend (
 
 **Ainda não implementado**: resumo de mensagens via IA (reaproveitaria o Planner/Lovable AI Gateway se pedido no futuro — não construído sem necessidade comprovada); nada do WhatsApp foi testado contra uma sessão real (depende de um Windows real + conta pra escanear QR code).
 
+**Voz do Presence** (resposta em voz da interação por wake word/duas palmas) — pedido explícito da Jheny depois de validar a integração real de WhatsApp/apps nesta máquina:
+- **Response Composer** (`src/response-composer.ts`) — descreve, em português, o resultado JÁ executado de um comando (resolvedor determinístico ou Planner), nunca decide nem executa nada. Reconhece as ferramentas de WhatsApp especificamente (lê a lista de conversas/mensagens de dentro do `result` e monta uma frase falável) e cai num resumo genérico ("Pronto: X.") pra qualquer outra ferramenta.
+- **`speech-output.ts`** — pede a síntese de voz à nuvem (`requestSpeech`, novo endpoint `POST /api/presence/agent/speech` no repositório principal, device-autenticado, reaproveitando a MESMA voz oficial ElevenLabs do app web — nenhuma voz nova/paralela) e publica um evento com o áudio em base64. Best-effort de propósito: uma falha de voz nunca derruba a execução real do comando, que já aconteceu antes.
+- Como não existe API de áudio no Main Process do Electron, quem toca de verdade é o Renderer (`renderer/renderer.js`, `new Audio("data:audio/mpeg;base64,...")`) — o Main só encaminha os bytes por IPC (`agent:speech-audio`).
+- Wireado só em `voice-interaction.ts` (wake word/duas palmas → comando falado → executado → resposta falada) — o comando digitado pelo site/fila de comandos continua só mostrando texto, sem voz, por design (modalidades diferentes).
+- **Não pôde ser validado nesta sessão**: reprodução de áudio real depende de hardware (alto-falante) e de uma chamada de rede bem-sucedida à ElevenLabs, nenhum dos dois alcançável deste sandbox. A composição de frases foi revisada por leitura de código, não testada contra um resultado real de ferramenta.
+
 ## Rodando
 
 ```bash

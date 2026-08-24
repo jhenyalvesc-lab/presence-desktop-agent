@@ -158,3 +158,22 @@ export async function sendAuditEntry(entry: AuditEntryPayload): Promise<void> {
   });
   if (!response.ok) throw new Error(`presence-agent/audit-sync-failed-${response.status}`);
 }
+
+/**
+ * Voz do Presence (roteiro original: "resposta em voz" da interação por
+ * comando) — pede ao backend pra sintetizar `text` na mesma voz oficial
+ * do produto (ElevenLabs, `/api/presence/agent/speech`, device-autenticado
+ * — o Desktop Agent nunca segura o JWT de sessão que o endpoint de voz
+ * do app web exige). Devolve os bytes de áudio (mp3); tocar é
+ * responsabilidade de quem chama (ver `speech-output.ts`).
+ */
+export async function requestSpeech(text: string): Promise<Buffer> {
+  const headers = await authHeader();
+  const response = await fetch(`${CLOUD_BASE_URL}/api/presence/agent/speech`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!response.ok) throw new Error(`presence-agent/speech-failed-${response.status}`);
+  return Buffer.from(await response.arrayBuffer());
+}

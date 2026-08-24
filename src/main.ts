@@ -25,6 +25,7 @@ import { loadDeviceCredential } from "./device-store";
 import { executeTool } from "./execution-engine";
 import { beginPairing, waitForApproval, type PairingOutcome } from "./pairing";
 import { getJobStatuses, onJobStatusChanged, scheduleJob } from "./scheduler";
+import { onSpeechAudioReady } from "./speech-output";
 import { createTray } from "./tray";
 import { onCommandCaptured, onCommandResolution, onPlannerResolution, onVoiceInteractionState, startVoiceInteractionListener } from "./voice-interaction";
 import {
@@ -56,6 +57,9 @@ void app.whenReady().then(() => {
   onCommandCaptured((event) => getMainWindow()?.webContents.send("agent:command-captured", event));
   onCommandResolution((resolution) => getMainWindow()?.webContents.send("agent:command-resolved", resolution));
   onPlannerResolution((resolution) => getMainWindow()?.webContents.send("agent:planner-resolved", resolution));
+  // Não existe API de áudio no Main Process — o Renderer é quem toca de
+  // verdade (ver renderer/renderer.js), este só encaminha os bytes.
+  onSpeechAudioReady((base64Mp3) => getMainWindow()?.webContents.send("agent:speech-audio", base64Mp3));
 
   onCommandQueueStatus((status, detail) => getMainWindow()?.webContents.send("agent:command-queue-status", { status, detail }));
   onCommandReceived((event) => getMainWindow()?.webContents.send("agent:command-queue-received", event));

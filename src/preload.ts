@@ -84,4 +84,7 @@ contextBridge.exposeInMainWorld("presenceAgent", {
   onWhatsAppStatusChanged: (callback: (status: string) => void): void => {
     ipcRenderer.on("agent:whatsapp-status-changed", (_event, status) => callback(status));
   },
+  onSpeechAudio: (callback: (base64Mp3: string) => void): void => {
+    ipcRenderer.on("agent:speech-audio", (_event, base64Mp3) => callback(base64Mp3));
+  },
 });

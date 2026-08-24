@@ -13,6 +13,8 @@
 import { onClapDetected, onWakeDetected } from "./audio-manager";
 import { resolveAndExecuteCommand, type CommandResolution } from "./command-resolver";
 import { planAndExecuteCommand, type PlannerResolution } from "./planner";
+import { composeSpeechForPlan, composeSpeechForResolution } from "./response-composer";
+import { speak } from "./speech-output";
 import { captureVoiceCommand } from "./stt-window";
 
 export type VoiceInteractionState = "idle" | "listening" | "error";
@@ -66,11 +68,14 @@ async function handleTrigger(): Promise<void> {
     const resolution = await resolveAndExecuteCommand(result.transcript);
     if (resolution.matched) {
       for (const listener of resolutionListeners) listener(resolution);
+      const speech = composeSpeechForResolution(resolution);
+      if (speech) void speak(speech);
     } else {
       // Filtra localmente primeiro: só recorre ao Planner (IA, Fase H)
       // depois que o resolvedor determinístico já não bateu com nada.
       const plan = await planAndExecuteCommand(result.transcript);
       for (const listener of plannerListeners) listener(plan);
+      void speak(composeSpeechForPlan(plan));
     }
 
     setState("idle");
