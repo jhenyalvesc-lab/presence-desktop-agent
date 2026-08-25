@@ -87,4 +87,7 @@ contextBridge.exposeInMainWorld("presenceAgent", {
   onSpeechAudio: (callback: (base64Mp3: string) => void): void => {
     ipcRenderer.on("agent:speech-audio", (_event, base64Mp3) => callback(base64Mp3));
   },
+  getVersion: (): Promise<{ version: string; packaged: boolean; updateReady: boolean }> =>
+    ipcRenderer.invoke("agent:get-version"),
+  checkForUpdates: (): Promise<void> => ipcRenderer.invoke("agent:check-for-updates"),
 });

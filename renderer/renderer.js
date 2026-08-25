@@ -278,4 +278,24 @@ window.presenceAgent.onSpeechAudio((base64Mp3) => {
   for (const status of schedulerStatus) renderJobStatus(status);
 
   await refreshWhatsAppStatus();
+  await refreshVersionStatus();
 })();
+
+const versionStatusEl = document.getElementById("version-status");
+const checkUpdatesButton = document.getElementById("check-updates");
+
+async function refreshVersionStatus() {
+  const info = await window.presenceAgent.getVersion();
+  const modeLabel = info.packaged ? "" : " (modo desenvolvimento — sem atualização automática)";
+  versionStatusEl.textContent = info.updateReady
+    ? `v${info.version} — atualização já baixada, reinicie pelo menu da bandeja pra aplicar`
+    : `v${info.version}${modeLabel}`;
+}
+
+checkUpdatesButton.addEventListener("click", async () => {
+  checkUpdatesButton.disabled = true;
+  versionStatusEl.textContent = "verificando...";
+  await window.presenceAgent.checkForUpdates();
+  await refreshVersionStatus();
+  checkUpdatesButton.disabled = false;
+});

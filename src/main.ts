@@ -17,6 +17,7 @@ import "./tools";
 
 import { getAudioStatus, onAudioStatus, onClapDetected, onWakeDetected, startAudioWorker, stopAudioWorker } from "./audio-manager";
 import { getRecentAuditEntries, onAuditEntry } from "./audit-log";
+import { checkForUpdatesNow, initAutoUpdater, isUpdateReady } from "./auto-updater";
 import { setAutostart } from "./autostart";
 import { pingCloud } from "./cloud-client";
 import { onCommandCompleted, onCommandQueueStatus, onCommandReceived, startCommandQueuePolling, stopCommandQueuePolling } from "./command-queue";
@@ -42,6 +43,7 @@ let pairingInFlight = false;
 
 const HEALTHCHECK_CRON = process.env["PRESENCE_HEALTHCHECK_CRON"] ?? "*/15 * * * *";
 const COMMAND_POLL_INTERVAL_MS = Number(process.env["PRESENCE_COMMAND_POLL_INTERVAL_MS"] ?? "4000");
+const UPDATE_CHECK_CRON = process.env["PRESENCE_UPDATE_CHECK_CRON"] ?? "0 */6 * * *";
 
 void app.whenReady().then(() => {
   createMainWindow();
@@ -49,6 +51,12 @@ void app.whenReady().then(() => {
   startAudioWorker();
   startVoiceInteractionListener();
   startCommandQueuePolling(COMMAND_POLL_INTERVAL_MS);
+  // Checagem inicial acontece dentro de initAutoUpdater(); o job agendado
+  // aqui só cobre o processo que fica rodando em segundo plano por dias
+  // (mesmo padrão de reaproveitar o Scheduler já existente, como o
+  // cloud-healthcheck logo abaixo).
+  initAutoUpdater();
+  scheduleJob("check-for-updates", UPDATE_CHECK_CRON, () => checkForUpdatesNow());
 
   onAudioStatus((status) => getMainWindow()?.webContents.send("agent:audio-status", status));
   onWakeDetected((event) => getMainWindow()?.webContents.send("agent:wake-detected", event));
@@ -122,6 +130,14 @@ ipcMain.handle("agent:get-status", async () => {
   const credential = await loadDeviceCredential();
   return { paired: credential !== null, deviceId: credential?.deviceId ?? null };
 });
+
+ipcMain.handle("agent:get-version", () => ({
+  version: app.getVersion(),
+  packaged: app.isPackaged,
+  updateReady: isUpdateReady(),
+}));
+
+ipcMain.handle("agent:check-for-updates", () => checkForUpdatesNow());
 
 ipcMain.handle("agent:start-pairing", async (): Promise<PairingOutcome> => {
   if (pairingInFlight) throw new Error("presence-agent/pairing-already-in-progress");

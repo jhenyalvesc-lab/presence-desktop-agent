@@ -122,7 +122,13 @@ Processo local (Electron + Node/TypeScript) do Presence — Fase 10 do backend (
 - Wireado só em `voice-interaction.ts` (wake word/duas palmas → comando falado → executado → resposta falada) — o comando digitado pelo site/fila de comandos continua só mostrando texto, sem voz, por design (modalidades diferentes).
 - **Não pôde ser validado nesta sessão**: reprodução de áudio real depende de hardware (alto-falante) e de uma chamada de rede bem-sucedida à ElevenLabs, nenhum dos dois alcançável deste sandbox. A composição de frases foi revisada por leitura de código, não testada contra um resultado real de ferramenta.
 
-## Rodando
+## Instalar (recomendado — sem precisar mexer em código)
+
+Baixe o instalador (`Presence-Setup-x.y.z.exe`) da aba [Releases](https://github.com/jhenyalvesc-lab/presence-desktop-agent/releases) deste repositório e rode. Isso instala o Presence de verdade no Windows (atalho, item na bandeja) — não é mais necessário `git pull`/`npm install`/rebuild manual a cada mudança.
+
+**Atualizar depois de já instalado:** o próprio app confere sozinho a cada 6h (e uma vez ao abrir) se existe uma versão nova nos Releases. Quando uma atualização termina de baixar, a bandeja ganha o item "Reiniciar e atualizar (versão x.y.z)" — clique nele (ou peça pelo botão "Verificar atualização" na janela de status pra checar na hora). Nenhuma conta/senha nova envolvida — os Releases são públicos, a checagem não usa nenhuma credencial sua.
+
+## Rodando a partir do código-fonte (desenvolvimento)
 
 ```bash
 npm install
@@ -131,6 +137,17 @@ npm run start
 ```
 
 Isso compila o TypeScript (`tsc`) e abre o Electron. Na primeira execução, sem pareamento ainda, a janela mostra um botão "Parear" — clique, um código de 6 dígitos aparece, e você o digita em Settings → Desktop Agent no app web do Presence (`spark-mind-friend.lovable.app`) enquanto estiver logada. Depois de aprovado, a janela mostra o dispositivo pareado e um botão "Ping" pra confirmar a comunicação de ponta a ponta.
+
+Rodando assim (`npm run start`, não instalado), a checagem automática de atualização fica desativada de propósito — não existe instalador local pra atualizar.
+
+## Publicar uma nova versão (pra quem mantém o código)
+
+```bash
+git tag v0.2.1
+git push origin v0.2.1
+```
+
+Isso dispara `.github/workflows/release.yml` num runner Windows do próprio GitHub: instala dependências, recompila os módulos nativos, roda a checagem de tipos e publica o instalador como GitHub Release via `electron-builder --publish always` — sem precisar de um Windows real à mão pra compilar. Suba a versão em `package.json` antes de criar a tag (o número da tag e da versão publicada devem bater).
 
 Por padrão aponta para `https://spark-mind-friend.lovable.app`. Para apontar para outro ambiente (ex. desenvolvimento local do backend), defina `PRESENCE_CLOUD_URL` antes de rodar.
 
@@ -148,5 +165,5 @@ Pra "abre X" funcionar de verdade, copie `config/app-registry.example.json` pra 
 - Planner: nunca chamou o endpoint de nuvem de verdade (mesmo isolamento de rede do sandbox) — a decomposição real de um comando composto pelo LLM (ex. "prepara meu ambiente de trabalho") nunca foi observada; só a lógica de execução sequencial dos passos foi validada com dados sintéticos.
 - Auditoria completa na nuvem: nunca sincronizou uma entrada real com sucesso (sem pareamento/rede neste sandbox) — só o caminho de falha silenciosa (best-effort) foi validado de verdade.
 - WhatsApp: nunca carregou o WhatsApp Web real (rede bloqueada neste sandbox) nem escaneou um QR code de verdade — só a mecânica de janela/isolamento/reconexão e a lógica de falha graciosa das ações foram validadas. TODOS os seletores de DOM usados (`whatsapp_connection_status` e as 4 ações reais) são inferidos, nunca confirmados contra uma página real; é praticamente certo que precisem de ajuste no primeiro teste real — não é "se", é "quando". Resumo de mensagens via IA não implementado (sem pedido/necessidade comprovada ainda).
-- Empacotamento/instalador (`electron-builder`, assinatura de código) ainda não configurado — roda hoje só via `npm run start`, em modo desenvolvimento.
-- Ícone da bandeja é um placeholder mínimo (círculo sólido), sem identidade visual definida ainda.
+- **Empacotamento/auto-update implementado** (`electron-builder` + `electron-updater`, ver seções "Instalar"/"Publicar uma nova versão" acima) — **nunca rodou de ponta a ponta neste sandbox** (sem Windows real, sem conseguir publicar um Release de verdade daqui): a primeira tag publicada por CI é quem prova se o instalador/atualização funcionam contra uma máquina real. Sem assinatura de código ainda — o instalador vai gerar o aviso padrão do Windows Defender/SmartScreen ("editor desconhecido") até isso ser resolvido (exige um certificado pago, decisão fora de escopo desta rodada).
+- Ícone da bandeja é um placeholder mínimo (círculo sólido), sem identidade visual definida ainda — o mesmo arquivo é reaproveitado como ícone do instalador/app por ora.

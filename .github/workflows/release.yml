@@ -1,0 +1,43 @@
+# Publica uma nova versão instalável do Presence Desktop Agent sempre que
+# uma tag "v*" é enviada (ex.: v0.2.0) — roda inteiramente no runner
+# Windows do GitHub, sem depender do computador da Jheny pra compilar.
+#
+# `electron-builder --publish always` (script "dist" do package.json)
+# cria o instalador (.exe, NSIS) e publica direto como um GitHub Release
+# — é esse Release que `electron-updater` (src/auto-updater.ts) consulta
+# pra saber se existe versão nova. GITHUB_TOKEN é o token automático do
+# próprio Actions (permissão de escrever Release neste repositório),
+# nunca um secret novo pra configurar.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Recompilar módulos nativos contra o Electron
+        run: npm run rebuild-native
+
+      - name: Checagem de tipos
+        run: npm run typecheck
+
+      - name: Build + publicar Release
+        run: npm run dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

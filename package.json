@@ -1,6 +1,6 @@
 {
   "name": "presence-desktop-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Presence Desktop Agent — processo local (Electron/Node/TypeScript). Fase A: fundação + pareamento com o backend cloud.",
   "main": "dist/main.js",
@@ -8,22 +8,61 @@
     "build": "tsc -p tsconfig.json",
     "start": "npm run build && electron .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "rebuild-native": "electron-rebuild -f"
+    "rebuild-native": "electron-rebuild -f",
+    "dist": "npm run build && electron-builder --publish always",
+    "pack": "npm run build && electron-builder --dir"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.2.0",
     "@types/node": "^22.10.0",
     "@types/screenshot-desktop": "^1.15.0",
     "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
     "typescript": "^5.7.2"
   },
   "dependencies": {
     "@nut-tree-fork/nut-js": "^4.2.6",
     "@picovoice/porcupine-node": "^4.0.2",
     "@picovoice/pvrecorder-node": "^1.2.9",
+    "electron-updater": "^6.3.9",
     "node-cron": "^4.6.0",
     "node-window-manager": "^2.2.4",
     "screenshot-desktop": "^1.15.6",
     "tesseract.js": "^7.0.0"
+  },
+  "build": {
+    "appId": "com.presence.desktopagent",
+    "productName": "Presence",
+    "files": [
+      "dist/**/*",
+      "renderer/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/tray-icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "jhenyalvesc-lab",
+        "repo": "presence-desktop-agent"
+      }
+    ]
   }
 }

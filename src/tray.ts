@@ -12,6 +12,10 @@ import { showMainWindow } from "./window";
 import { showWhatsAppWindow } from "./whatsapp-window";
 
 let tray: Tray | null = null;
+// Só existe atualização pendente depois que auto-updater.ts confirma
+// "update-downloaded" — nunca antes disso (evita mostrar um item que
+// reiniciaria pra uma versão que ainda não terminou de baixar).
+let pendingUpdateVersion: string | null = null;
 
 export function createTray(): Tray {
   if (tray) return tray;
@@ -25,8 +29,18 @@ export function createTray(): Tray {
   return tray;
 }
 
+/** Chamado por auto-updater.ts quando uma atualização já foi baixada. */
+export function notifyUpdateReady(version: string): void {
+  pendingUpdateVersion = version;
+  refreshTrayMenu();
+}
+
 function refreshTrayMenu(): void {
   if (!tray) return;
+  // Importado aqui (não no topo) pra evitar ciclo de módulo com
+  // auto-updater.ts, que já importa deste arquivo.
+  const { quitAndInstallUpdate } = require("./auto-updater") as typeof import("./auto-updater");
+
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Abrir Presence Desktop Agent", click: () => showMainWindow() },
@@ -45,6 +59,15 @@ function refreshTrayMenu(): void {
         label: "Conectar WhatsApp (opt-in, risco de ToS)",
         click: () => showWhatsAppWindow(),
       },
+      ...(pendingUpdateVersion
+        ? [
+            { type: "separator" as const },
+            {
+              label: `Reiniciar e atualizar (versão ${pendingUpdateVersion})`,
+              click: () => quitAndInstallUpdate(),
+            },
+          ]
+        : []),
       { type: "separator" },
       {
         label: "Encerrar",
