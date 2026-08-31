@@ -1,6 +1,6 @@
 {
   "name": "presence-desktop-agent",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Presence Desktop Agent — processo local (Electron/Node/TypeScript). Fase A: fundação + pareamento com o backend cloud.",
   "main": "dist/main.js",
@@ -49,7 +49,7 @@
           "arch": ["x64"]
         }
       ],
-      "icon": "assets/tray-icon.png"
+      "icon": "assets/app-icon.png"
     },
     "nsis": {
       "oneClick": false,
