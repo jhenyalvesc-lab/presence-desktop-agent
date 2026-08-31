@@ -1,6 +1,6 @@
 {
   "name": "presence-desktop-agent",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "Presence Desktop Agent — processo local (Electron/Node/TypeScript). Fase A: fundação + pareamento com o backend cloud.",
   "main": "dist/main.js",
@@ -61,7 +61,8 @@
       {
         "provider": "github",
         "owner": "jhenyalvesc-lab",
-        "repo": "presence-desktop-agent"
+        "repo": "presence-desktop-agent",
+        "releaseType": "release"
       }
     ]
   }
