@@ -1,6 +1,6 @@
 // Presence Desktop Agent — Voice Mode / interação por comando.
 //
-// Depois da wake word ("Presence", Fase 10B) ou das duas palmas (Fase
+// Depois da wake word ("acordar", Fase 10B) ou das duas palmas (Fase
 // 10C), entra em modo de escuta e captura o comando falado via STT
 // (`stt-window.ts`, Fase 10D). O texto capturado é sempre exposto pro
 // Main/UI; além disso (Fase 10E), tenta resolvê-lo de forma

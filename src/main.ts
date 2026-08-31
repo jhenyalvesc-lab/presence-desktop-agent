@@ -2,7 +2,7 @@
 //
 // Fase A (aprovada): Main Process, Tray, autostart, janela que esconde
 // em vez de fechar, pareamento com o backend cloud e um ping de prova.
-// Fase 10B: Audio Worker com Wake Word ("Presence"). Fase 10C: duas
+// Fase 10B: Audio Worker com Wake Word ("acordar", português). Fase 10C: duas
 // palmas, sobre o mesmo Audio Worker. Fase 10D: captura do comando
 // falado (STT) depois do gatilho. Fase 10E: Tool Registry + resolução
 // determinística de "abre X". Fase 10F: Permission Manager + Execution

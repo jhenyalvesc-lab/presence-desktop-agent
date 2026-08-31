@@ -4,7 +4,7 @@
 // ver arquitetura aprovada: "sobrevive a crash sem derrubar o Main").
 // Única responsabilidade: capturar áudio contínuo do microfone e rodar
 // engines de detecção sobre o mesmo stream de PCM — Wake Word
-// ("Presence", Fase 10B) e duas palmas (Fase 10C), sem um segundo
+// ("acordar", Fase 10B) e duas palmas (Fase 10C), sem um segundo
 // pipeline de áudio pra cada um.
 //
 // Nunca repassa os frames crus pro Main — só eventos discretos
