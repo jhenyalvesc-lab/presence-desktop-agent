@@ -56,7 +56,17 @@ export function checkConfirmationHeuristic(text: string): ConfirmationHeuristicR
   return { matched: false };
 }
 
-async function claudeCodeProcessStatus(): Promise<{ running: boolean; matches: { pid: number; name: string }[] }> {
+export interface ClaudeCodeProcessStatusResult {
+  running: boolean;
+  matches: { pid: number; name: string }[];
+}
+
+export interface ClaudeCodeConfirmationCheckResult {
+  windowFound: boolean;
+  heuristic: ConfirmationHeuristicResult | null;
+}
+
+async function claudeCodeProcessStatus(): Promise<ClaudeCodeProcessStatusResult> {
   const rawPattern = process.env["PRESENCE_CLAUDE_CODE_PROCESS_PATTERN"] ?? DEFAULT_PROCESS_PATTERN;
   const pattern = new RegExp(rawPattern, "i");
   const processes = await listProcesses();
@@ -64,10 +74,7 @@ async function claudeCodeProcessStatus(): Promise<{ running: boolean; matches: {
   return { running: matches.length > 0, matches };
 }
 
-async function claudeCodeConfirmationCheck(): Promise<{
-  windowFound: boolean;
-  heuristic: ConfirmationHeuristicResult | null;
-}> {
+async function claudeCodeConfirmationCheck(): Promise<ClaudeCodeConfirmationCheckResult> {
   const rawPattern = process.env["PRESENCE_CLAUDE_CODE_WINDOW_PATTERN"] ?? DEFAULT_WINDOW_PATTERN;
   const pattern = new RegExp(rawPattern, "i");
   const window = listWindows().find((candidate) => pattern.test(candidate.title));

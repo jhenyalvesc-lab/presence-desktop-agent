@@ -11,9 +11,20 @@
 
 import type { CommandResolution } from "./command-resolver";
 import type { PlannerResolution, PlannerStepOutcome } from "./planner";
+import type {
+  ClaudeCodeConfirmationCheckResult,
+  ClaudeCodeProcessStatusResult,
+} from "./tools/claude-code-tools";
+import type { ActionsRunStatus, PullRequestStatus } from "./tools/github-tools";
+import type { ProcessInfo } from "./tools/process-tools";
 import type { WhatsAppActionResult, WhatsAppChatSummary, WhatsAppMessage } from "./whatsapp-actions";
 
 const MAX_ITEMS_SPOKEN = 3;
+const MAX_GIT_TEXT_SPOKEN = 300;
+
+function capText(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}...` : text;
+}
 
 function describeChats(chats: WhatsAppChatSummary[]): string {
   if (chats.length === 0) return "Nenhuma conversa encontrada.";
@@ -48,6 +59,59 @@ function describeToolResult(tool: string, result: unknown): string | null {
     const action = result as WhatsAppActionResult<{ sent: boolean }> | undefined;
     if (action?.ok) return "Mensagem enviada.";
     return action && !action.ok ? `Não consegui enviar: ${action.error}` : null;
+  }
+
+  // Agente Universal, Fase G: dá voz de verdade ao que a Fase 10H já
+  // sabe checar (Claude Code/git/GitHub) — antes disso, qualquer uma
+  // dessas ferramentas caía no genérico `${label}.` (a INTENÇÃO
+  // gerada pelo Planner antes de rodar, nunca o resultado real).
+  if (tool === "claude_code_process_status") {
+    const status = result as ClaudeCodeProcessStatusResult;
+    if (!status.running) return "Não encontrei nenhum processo do Claude Code rodando agora.";
+    if (status.matches.length === 1) {
+      const match = status.matches[0];
+      return `Sim, encontrei um processo do Claude Code rodando (${match.name}, pid ${match.pid}).`;
+    }
+    return `Sim, encontrei ${status.matches.length} processos que parecem do Claude Code rodando.`;
+  }
+  if (tool === "claude_code_confirmation_check") {
+    const check = result as ClaudeCodeConfirmationCheckResult;
+    if (!check.windowFound) return "Não encontrei nenhuma janela do Claude Code aberta agora.";
+    if (check.heuristic?.matched) {
+      return "Pelo que consegui ler na tela, parece que o Claude Code está esperando uma confirmação sua — mas isso é só uma estimativa, não tenho certeza.";
+    }
+    return "Encontrei a janela do Claude Code aberta, mas não percebi nenhum pedido de confirmação na tela — pode estar processando ainda (estimativa, não tenho certeza).";
+  }
+  if (tool === "git_status" || tool === "git_branch" || tool === "git_log") {
+    const text = typeof result === "string" ? result.trim() : "";
+    const capped = capText(text, MAX_GIT_TEXT_SPOKEN);
+    if (tool === "git_branch") return capped ? `Você está no branch ${capped}.` : "Não consegui identificar o branch atual.";
+    if (tool === "git_log") return capped ? `Últimos commits: ${capped}` : "Não encontrei nenhum commit.";
+    return capped ? `Status do git: ${capped}` : "O repositório está limpo, sem mudanças pendentes.";
+  }
+  if (tool === "git_diff") {
+    const text = typeof result === "string" ? result.trim() : "";
+    return text.length === 0
+      ? "Nenhuma mudança pendente."
+      : "Tem mudanças não commitadas — não vou ler o diff inteiro em voz alta, mas dá pra ver os detalhes na tela.";
+  }
+  if (tool === "github_pr_status") {
+    const pr = result as PullRequestStatus;
+    if (pr.merged) return `O Pull Request "${pr.title}" já foi mesclado.`;
+    if (pr.state !== "open") return `O Pull Request "${pr.title}" foi fechado sem mesclar.`;
+    if (pr.mergeable === false) return `O Pull Request "${pr.title}" está aberto, mas tem conflito.`;
+    return `O Pull Request "${pr.title}" está aberto.`;
+  }
+  if (tool === "github_actions_status") {
+    const run = result as ActionsRunStatus | null;
+    if (!run) return "Não encontrei nenhuma execução do GitHub Actions nesse branch.";
+    if (run.status !== "completed") return `A última execução no branch ${run.headBranch} ainda está em andamento.`;
+    if (run.conclusion === "success") return `O build passou — última execução no branch ${run.headBranch} concluída com sucesso.`;
+    return `O build falhou na última execução do branch ${run.headBranch} (${run.conclusion ?? "motivo desconhecido"}).`;
+  }
+  if (tool === "list_processes") {
+    const processes = result as ProcessInfo[];
+    return `Encontrei ${processes.length} processos rodando agora.`;
   }
   return null;
 }

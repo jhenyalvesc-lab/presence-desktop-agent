@@ -41,12 +41,12 @@ const ARGS_HINTS: Record<string, string> = {
   close_window: '{"processId": <número, de list_windows>}',
   read_file: '{"filePath": "<caminho absoluto>"}',
   show_notification: '{"title": "<título>", "body": "<corpo>"}',
-  git_status: '{"cwd": "<diretório absoluto do repositório>"}',
-  git_log: '{"cwd": "<diretório absoluto>", "count": <número, opcional>}',
-  git_branch: '{"cwd": "<diretório absoluto>"}',
-  git_diff: '{"cwd": "<diretório absoluto>"}',
-  github_pr_status: '{"owner": "<dono>", "repo": "<repositório>", "number": <número>}',
-  github_actions_status: '{"owner": "<dono>", "repo": "<repositório>", "branch": "<branch>"}',
+  git_status: '{"cwd": "<diretório absoluto do repositório, opcional — omita se ela não citou um caminho>"}',
+  git_log: '{"cwd": "<diretório absoluto, opcional>", "count": <número, opcional>}',
+  git_branch: '{"cwd": "<diretório absoluto, opcional>"}',
+  git_diff: '{"cwd": "<diretório absoluto, opcional>"}',
+  github_pr_status: '{"owner": "<dono, opcional>", "repo": "<repositório, opcional>", "number": <número>}',
+  github_actions_status: '{"owner": "<dono, opcional>", "repo": "<repositório, opcional>", "branch": "<branch, opcional, padrão \\"main\\">"}',
   // Achado real (validação em máquina de usuária, 23/08/2026): sem
   // dica aqui, o Planner montou args com nomes de campo errados pra
   // whatsapp_send_message (ex. algo diferente de "chatName"/"text"),
