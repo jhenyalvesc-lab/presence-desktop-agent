@@ -14,6 +14,15 @@ export interface AgentStatus {
 
 export type PairingResult = { status: "ready"; deviceId: string } | { status: "expired" };
 
+export type UpdaterStatus =
+  | { state: "idle" }
+  | { state: "checking" }
+  | { state: "available"; version: string }
+  | { state: "not-available" }
+  | { state: "downloading"; percent: number }
+  | { state: "downloaded"; version: string }
+  | { state: "error"; message: string };
+
 export interface AudioStatus {
   recorder: "idle" | "starting" | "listening" | "stopped" | "error";
   wakeWord: "disabled" | "not_configured" | "listening" | "error";
@@ -93,4 +102,7 @@ contextBridge.exposeInMainWorld("presenceAgent", {
   getVersion: (): Promise<{ version: string; packaged: boolean; updateReady: boolean }> =>
     ipcRenderer.invoke("agent:get-version"),
   checkForUpdates: (): Promise<void> => ipcRenderer.invoke("agent:check-for-updates"),
+  onUpdaterStatus: (callback: (status: UpdaterStatus) => void): void => {
+    ipcRenderer.on("agent:update-status", (_event, status) => callback(status));
+  },
 });

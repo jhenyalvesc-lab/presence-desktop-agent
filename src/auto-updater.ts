@@ -33,6 +33,40 @@ export function quitAndInstallUpdate(): void {
   autoUpdater.quitAndInstall();
 }
 
+// A tela de status ("Versão", index.html) não tinha nenhuma visibilidade
+// real do que acontece depois de clicar "Verificar atualização" — só
+// mostrava "verificando..." e voltava pro número da versão atual,
+// escondendo tanto sucesso silencioso (baixando em segundo plano) quanto
+// falha silenciosa (sem rede, release sem asset compatível, etc.). Esses
+// eventos existem no `autoUpdater` desde sempre — só nunca tinham um
+// listener que os expusesse pra fora deste módulo.
+export type UpdaterStatus =
+  | { state: "idle" }
+  | { state: "checking" }
+  | { state: "available"; version: string }
+  | { state: "not-available" }
+  | { state: "downloading"; percent: number }
+  | { state: "downloaded"; version: string }
+  | { state: "error"; message: string };
+
+type StatusListener = (status: UpdaterStatus) => void;
+const statusListeners = new Set<StatusListener>();
+let lastStatus: UpdaterStatus = { state: "idle" };
+
+export function onUpdaterStatus(listener: StatusListener): () => void {
+  statusListeners.add(listener);
+  return () => statusListeners.delete(listener);
+}
+
+export function getUpdaterStatus(): UpdaterStatus {
+  return lastStatus;
+}
+
+function setStatus(status: UpdaterStatus): void {
+  lastStatus = status;
+  for (const listener of statusListeners) listener(status);
+}
+
 export function initAutoUpdater(): void {
   if (initialized) return;
   initialized = true;
@@ -45,16 +79,27 @@ export function initAutoUpdater(): void {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
+  autoUpdater.on("checking-for-update", () => setStatus({ state: "checking" }));
+  autoUpdater.on("update-available", (info) => setStatus({ state: "available", version: info.version }));
+  autoUpdater.on("update-not-available", () => setStatus({ state: "not-available" }));
+  autoUpdater.on("download-progress", (progress) =>
+    setStatus({ state: "downloading", percent: Math.round(progress.percent) }),
+  );
+
   autoUpdater.on("error", (error) => {
-    // Nunca notifica a usuária por uma falha de checagem (sem rede, por
-    // exemplo, é o caso mais comum) — mesmo espírito de `pingCloud()`
-    // silencioso em `cloud-client.ts`.
+    // Nunca deixa uma falha de checagem (sem rede, por exemplo) derrubar o
+    // agente — mesmo espírito de `pingCloud()` em `cloud-client.ts`. Mas
+    // agora, diferente de antes, a falha real fica visível na tela de
+    // status (`setStatus` abaixo) em vez de só no console (invisível pra
+    // quem não tem DevTools aberto num app empacotado).
     console.error("[auto-updater] falha ao checar/baixar atualização", error);
+    setStatus({ state: "error", message: error.message });
   });
 
   autoUpdater.on("update-downloaded", (info) => {
     updateReady = true;
     notifyUpdateReady(info.version);
+    setStatus({ state: "downloaded", version: info.version });
     void executeTool("show_notification", {
       title: "Presence — atualização pronta",
       body: `Versão ${info.version} baixada. Reinicie pelo menu da bandeja (Encerrar → abrir de novo, ou "Reiniciar e atualizar") pra aplicar.`,

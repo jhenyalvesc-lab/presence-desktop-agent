@@ -17,7 +17,7 @@ import "./tools";
 
 import { getAudioStatus, onAudioStatus, onClapDetected, onWakeDetected, startAudioWorker, stopAudioWorker } from "./audio-manager";
 import { getRecentAuditEntries, onAuditEntry } from "./audit-log";
-import { checkForUpdatesNow, initAutoUpdater, isUpdateReady } from "./auto-updater";
+import { checkForUpdatesNow, initAutoUpdater, isUpdateReady, onUpdaterStatus } from "./auto-updater";
 import { setAutostart } from "./autostart";
 import { pingCloud } from "./cloud-client";
 import { onCommandCompleted, onCommandQueueStatus, onCommandReceived, startCommandQueuePolling, stopCommandQueuePolling } from "./command-queue";
@@ -57,6 +57,7 @@ void app.whenReady().then(() => {
   // cloud-healthcheck logo abaixo).
   initAutoUpdater();
   scheduleJob("check-for-updates", UPDATE_CHECK_CRON, () => checkForUpdatesNow());
+  onUpdaterStatus((status) => getMainWindow()?.webContents.send("agent:update-status", status));
 
   onAudioStatus((status) => getMainWindow()?.webContents.send("agent:audio-status", status));
   onWakeDetected((event) => getMainWindow()?.webContents.send("agent:wake-detected", event));

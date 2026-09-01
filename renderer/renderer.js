@@ -294,10 +294,38 @@ async function refreshVersionStatus() {
     : `v${info.version}${modeLabel}`;
 }
 
+function renderUpdaterStatus(status) {
+  switch (status.state) {
+    case "checking":
+      versionStatusEl.textContent = "verificando...";
+      break;
+    case "available":
+      versionStatusEl.textContent = `atualização encontrada (v${status.version}), baixando...`;
+      break;
+    case "downloading":
+      versionStatusEl.textContent = `baixando atualização... ${status.percent}%`;
+      break;
+    case "not-available":
+      versionStatusEl.textContent = "você já está na versão mais recente.";
+      checkUpdatesButton.disabled = false;
+      break;
+    case "downloaded":
+      versionStatusEl.textContent = `versão ${status.version} baixada — reinicie pelo menu da bandeja pra aplicar.`;
+      checkUpdatesButton.disabled = false;
+      break;
+    case "error":
+      versionStatusEl.textContent = `erro ao checar atualização: ${status.message}`;
+      checkUpdatesButton.disabled = false;
+      break;
+    default:
+      break;
+  }
+}
+
+window.presenceAgent.onUpdaterStatus(renderUpdaterStatus);
+
 checkUpdatesButton.addEventListener("click", async () => {
   checkUpdatesButton.disabled = true;
   versionStatusEl.textContent = "verificando...";
   await window.presenceAgent.checkForUpdates();
-  await refreshVersionStatus();
-  checkUpdatesButton.disabled = false;
 });
