@@ -21,6 +21,7 @@ import { completeCommand, pollNextCommand } from "./cloud-client";
 import { resolveAndExecuteCommand, type CommandResolution } from "./command-resolver";
 import { loadDeviceCredential } from "./device-store";
 import { planAndExecuteCommand, type PlannerResolution } from "./planner";
+import { composeSpeechForPlan, composeSpeechForResolution } from "./response-composer";
 
 const DEFAULT_POLL_INTERVAL_MS = 4000;
 
@@ -103,7 +104,16 @@ async function pollOnce(): Promise<void> {
       ? deterministic
       : await planAndExecuteCommand(command.text);
     const status = resolutionStatus(resolution);
-    await completeCommand(command.id, status, resolution);
+    // Fase E (Agente Universal, spark-mind-friend): a mesma composição de
+    // fala já usada no fluxo de voz local (`voice-interaction.ts`) — nunca
+    // duplicar a lógica de interpretar o resultado bruto do lado da nuvem.
+    // Manda junto com `completeCommand` pra a conversa (browser/voz) poder
+    // usar a resposta real, não só "já mandei o comando".
+    const speech =
+      "matched" in resolution
+        ? (composeSpeechForResolution(resolution) ?? "Feito.")
+        : composeSpeechForPlan(resolution);
+    await completeCommand(command.id, status, resolution, speech);
 
     for (const listener of completedListeners) {
       listener({ id: command.id, text: command.text, status, resolution });

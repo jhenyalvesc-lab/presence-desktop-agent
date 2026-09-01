@@ -86,12 +86,13 @@ export async function completeCommand(
   id: string,
   status: "done" | "failed",
   result: unknown,
+  speech?: string,
 ): Promise<void> {
   const headers = await authHeader();
   const response = await fetch(`${CLOUD_BASE_URL}/api/presence/agent/commands/complete`, {
     method: "POST",
     headers: { ...headers, "content-type": "application/json" },
-    body: JSON.stringify({ id, status, result }),
+    body: JSON.stringify({ id, status, result, speech }),
   });
   if (!response.ok) throw new Error(`presence-agent/commands-complete-failed-${response.status}`);
 }
