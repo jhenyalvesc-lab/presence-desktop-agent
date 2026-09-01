@@ -36,6 +36,16 @@ export function showPresenceAppWindow(): void {
     },
   });
 
+  // Electron bloqueia permissões de mídia (microfone) por padrão em
+  // qualquer janela nova — sem isso, o Voice Mode do próprio site (que
+  // usa a Web Speech API do navegador) nunca conseguiria capturar áudio
+  // aqui dentro. Mesmo tratamento já usado em `stt-window.ts`, escopado
+  // só a esta janela (por `webContents.id`).
+  const window = appWindow;
+  window.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    callback(permission === "media" && webContents.id === window.webContents.id);
+  });
+
   void appWindow.loadURL(CLOUD_BASE_URL);
 
   appWindow.on("closed", () => {
