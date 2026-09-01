@@ -23,6 +23,21 @@ export function onSpeechAudioReady(listener: AudioListener): () => void {
   return () => listeners.delete(listener);
 }
 
+// `speak()` precisa que quem chama possa esperar o áudio TERMINAR de tocar
+// (ex.: falar a saudação antes de começar a escutar o comando) — o
+// Renderer avisa via `agent:speech-audio-ended` (ver renderer.js/main.ts)
+// quando o <audio> dispara `ended`/`error`. Timeout de segurança: nunca
+// trava pra sempre se esse sinal não chegar por algum motivo.
+const SPEECH_PLAYBACK_TIMEOUT_MS = 20_000;
+let pendingEndResolvers: (() => void)[] = [];
+
+/** Chamado pelo Main quando o Renderer confirma que o áudio acabou de tocar. */
+export function notifySpeechAudioEnded(): void {
+  const resolvers = pendingEndResolvers;
+  pendingEndResolvers = [];
+  for (const resolve of resolvers) resolve();
+}
+
 export async function speak(text: string): Promise<void> {
   const trimmed = text.trim();
   if (!trimmed) return;
@@ -31,6 +46,11 @@ export async function speak(text: string): Promise<void> {
     const audio = await requestSpeech(trimmed);
     const base64 = audio.toString("base64");
     for (const listener of listeners) listener(base64);
+
+    await new Promise<void>((resolve) => {
+      pendingEndResolvers.push(resolve);
+      setTimeout(resolve, SPEECH_PLAYBACK_TIMEOUT_MS);
+    });
   } catch {
     // Best-effort — ver comentário do módulo. Nunca lança pra quem chamou.
   }

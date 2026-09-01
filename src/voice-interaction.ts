@@ -10,7 +10,9 @@
 // mesmo princípio Local-First/AI-on-demand: filtra localmente primeiro,
 // só recorre à IA depois.
 
+import { showPresenceAppWindow } from "./app-window";
 import { onClapDetected, onWakeDetected } from "./audio-manager";
+import { requestGreeting } from "./cloud-client";
 import { resolveAndExecuteCommand, type CommandResolution } from "./command-resolver";
 import { planAndExecuteCommand, type PlannerResolution } from "./planner";
 import { composeSpeechForPlan, composeSpeechForResolution } from "./response-composer";
@@ -58,6 +60,21 @@ export function onPlannerResolution(listener: PlannerListener): () => void {
 async function handleTrigger(): Promise<void> {
   if (listening) return; // já ouvindo um comando — ignora um segundo gatilho sobreposto
   listening = true;
+
+  // Abre a interface completa (o orbe, Treinos, Casa etc. — sempre a
+  // versão publicada mais atual) e fala uma saudação espontânea ANTES de
+  // escutar — pedido explícito da Jheny: nunca uma frase fixa no código,
+  // sempre gerada na hora pela IA (ver handle-agent-greeting-request.ts).
+  // Melhor esforço: se a saudação falhar (rede fora do ar etc.), segue
+  // direto pra escuta em vez de travar o gatilho inteiro por causa disso.
+  showPresenceAppWindow();
+  try {
+    const greeting = await requestGreeting();
+    await speak(greeting);
+  } catch (error) {
+    console.error("[presence/voice-interaction] falha ao buscar saudação", error);
+  }
+
   setState("listening");
 
   const result = await captureVoiceCommand();

@@ -257,6 +257,8 @@ setInterval(() => void refreshWhatsAppStatus(), 5000);
 // tocar de verdade acontece aqui, no Renderer, via <audio>.
 window.presenceAgent.onSpeechAudio((base64Mp3) => {
   const audio = new Audio(`data:audio/mpeg;base64,${base64Mp3}`);
+  audio.addEventListener("ended", () => window.presenceAgent.notifySpeechAudioEnded());
+  audio.addEventListener("error", () => window.presenceAgent.notifySpeechAudioEnded());
   void audio.play();
 });
 

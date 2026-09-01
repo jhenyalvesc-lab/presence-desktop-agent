@@ -177,3 +177,20 @@ export async function requestSpeech(text: string): Promise<Buffer> {
   if (!response.ok) throw new Error(`presence-agent/speech-failed-${response.status}`);
   return Buffer.from(await response.arrayBuffer());
 }
+
+/**
+ * Saudação espontânea ao acordar (duas palmas/wake word) — pede à nuvem
+ * uma frase gerada na hora pela IA (nunca fixa no código), reaproveitando
+ * o mesmo mecanismo já usado pela Voice Mode do site
+ * (`/api/presence/agent/greeting`, device-autenticado).
+ */
+export async function requestGreeting(): Promise<string> {
+  const headers = await authHeader();
+  const response = await fetch(`${CLOUD_BASE_URL}/api/presence/agent/greeting`, {
+    method: "POST",
+    headers,
+  });
+  if (!response.ok) throw new Error(`presence-agent/greeting-failed-${response.status}`);
+  const body = (await response.json()) as { speech: string };
+  return body.speech;
+}

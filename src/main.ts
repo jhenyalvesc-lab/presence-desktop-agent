@@ -26,7 +26,7 @@ import { loadDeviceCredential } from "./device-store";
 import { executeTool } from "./execution-engine";
 import { beginPairing, waitForApproval, type PairingOutcome } from "./pairing";
 import { getJobStatuses, onJobStatusChanged, scheduleJob } from "./scheduler";
-import { onSpeechAudioReady } from "./speech-output";
+import { notifySpeechAudioEnded, onSpeechAudioReady } from "./speech-output";
 import { createTray } from "./tray";
 import { onCommandCaptured, onCommandResolution, onPlannerResolution, onVoiceInteractionState, startVoiceInteractionListener } from "./voice-interaction";
 import {
@@ -166,6 +166,8 @@ ipcMain.handle("agent:set-autostart", (_event, enabled: boolean) => {
 ipcMain.on("agent:confirmation-response", (_event, id: string, approved: boolean) => {
   respondToConfirmation(id, approved);
 });
+
+ipcMain.on("agent:speech-audio-ended", () => notifySpeechAudioEnded());
 
 ipcMain.handle("agent:get-audit-log", () => getRecentAuditEntries());
 
