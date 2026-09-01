@@ -26,7 +26,15 @@ type CommandListener = (event: { transcript: string }) => void;
 type ResolutionListener = (resolution: CommandResolution) => void;
 type PlannerListener = (resolution: PlannerResolution) => void;
 
+// Agente Universal, Fase F: achado real da auditoria — sem isso, um ruído
+// parecido com palma bem no instante em que um ciclo termina (`listening`
+// volta a `false`) reabre o Presence imediatamente de novo, sem folga
+// nenhuma. Mesmo espírito do guard `if (listening) return` logo abaixo,
+// só estendido no tempo depois que o ciclo já fechou.
+const TRIGGER_COOLDOWN_MS = 1500;
+
 let listening = false;
+let cooldownUntil = 0;
 const stateListeners = new Set<StateListener>();
 const commandListeners = new Set<CommandListener>();
 const resolutionListeners = new Set<ResolutionListener>();
@@ -59,6 +67,7 @@ export function onPlannerResolution(listener: PlannerListener): () => void {
 
 async function handleTrigger(): Promise<void> {
   if (listening) return; // já ouvindo um comando — ignora um segundo gatilho sobreposto
+  if (Date.now() < cooldownUntil) return; // ciclo acabou de terminar — ignora um gatilho espúrio logo em seguida
   listening = true;
 
   // Abre a interface completa (o orbe, Treinos, Casa etc. — sempre a
@@ -102,6 +111,7 @@ async function handleTrigger(): Promise<void> {
   }
 
   listening = false;
+  cooldownUntil = Date.now() + TRIGGER_COOLDOWN_MS;
 }
 
 function setState(state: VoiceInteractionState): void {
