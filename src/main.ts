@@ -15,6 +15,7 @@ import { app, ipcMain } from "electron";
 
 import "./tools";
 
+import { showPresenceAppWindow } from "./app-window";
 import { getAudioStatus, onAudioStatus, onClapDetected, onWakeDetected, startAudioWorker, stopAudioWorker } from "./audio-manager";
 import { getRecentAuditEntries, onAuditEntry } from "./audit-log";
 import { checkForUpdatesNow, initAutoUpdater, isUpdateReady, onUpdaterStatus } from "./auto-updater";
@@ -46,7 +47,8 @@ const COMMAND_POLL_INTERVAL_MS = Number(process.env["PRESENCE_COMMAND_POLL_INTER
 const UPDATE_CHECK_CRON = process.env["PRESENCE_UPDATE_CHECK_CRON"] ?? "0 */6 * * *";
 
 void app.whenReady().then(() => {
-  createMainWindow();
+  createMainWindow(); // painel técnico de diagnóstico — nasce escondido (window.ts)
+  showPresenceAppWindow(); // interface completa do Presence — é o que a usuária espera ver ao abrir o app
   createTray();
   startAudioWorker();
   startVoiceInteractionListener();

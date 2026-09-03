@@ -6,6 +6,7 @@
 import { app, Menu, nativeImage, Tray } from "electron";
 import path from "node:path";
 
+import { showPresenceAppWindow } from "./app-window";
 import { stopAudioWorker } from "./audio-manager";
 import { isAutostartEnabled, setAutostart } from "./autostart";
 import { showMainWindow } from "./window";
@@ -23,7 +24,9 @@ export function createTray(): Tray {
   const icon = nativeImage.createFromPath(path.join(__dirname, "..", "assets", "tray-icon.png"));
   tray = new Tray(icon);
   tray.setToolTip("Presence Desktop Agent");
-  tray.on("click", () => showMainWindow());
+  // Clique no ícone abre o app de verdade — o painel técnico (pareamento/
+  // wake word/duas palmas) fica só no menu, item "Status do dispositivo".
+  tray.on("click", () => showPresenceAppWindow());
   refreshTrayMenu();
 
   return tray;
@@ -43,7 +46,8 @@ function refreshTrayMenu(): void {
 
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: "Abrir Presence Desktop Agent", click: () => showMainWindow() },
+      { label: "Abrir Presence", click: () => showPresenceAppWindow() },
+      { label: "Status do dispositivo (pareamento, wake word)", click: () => showMainWindow() },
       { type: "separator" },
       {
         label: "Iniciar com o Windows",
