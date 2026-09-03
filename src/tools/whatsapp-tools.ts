@@ -41,8 +41,10 @@ registerTool({
 registerTool({
   name: "whatsapp_read_messages",
   riskTier: "read_only",
-  description: "Lê as últimas mensagens de uma conversa do WhatsApp, pelo nome do contato/grupo.",
-  run: (args: { chatName: string; limit?: number }) => readMessages(args.chatName, args.limit ?? 20),
+  description:
+    "Lê as últimas mensagens de uma conversa do WhatsApp, pelo nome do contato/grupo. Com transcribeAudio=true, também transcreve mensagens de voz (100% local, mais lento — só usar quando a usuária pedir explicitamente pra incluir/resumir áudios).",
+  run: (args: { chatName: string; limit?: number; transcribeAudio?: boolean }) =>
+    readMessages(args.chatName, args.limit ?? 20, args.transcribeAudio ?? false),
 });
 
 registerTool({

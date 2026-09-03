@@ -39,7 +39,14 @@ function describeChats(chats: WhatsAppChatSummary[]): string {
 function describeMessages(messages: WhatsAppMessage[]): string {
   if (messages.length === 0) return "Não encontrei mensagens nessa conversa.";
   const last = messages.slice(-MAX_ITEMS_SPOKEN);
-  const parts = last.map((message) => `${message.fromMe ? "você disse" : (message.author ?? "a pessoa disse")}: ${message.text}`);
+  const parts = last.map((message) => {
+    const who = message.fromMe ? "você disse" : (message.author ?? "a pessoa disse");
+    // Marca o que veio de transcrição de áudio, pra nunca confundir com
+    // texto digitado de verdade — extensão da Fase J, pedido explícito da
+    // Jheny (transcrição 100% local, ver `whatsapp-transcription.ts`).
+    const label = message.kind === "audio" ? (message.transcribed ? "(áudio) " : "(áudio não transcrito) ") : "";
+    return `${who}: ${label}${message.text}`;
+  });
   return `Últimas mensagens — ${parts.join(". ")}.`;
 }
 

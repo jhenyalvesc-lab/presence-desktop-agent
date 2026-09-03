@@ -22,6 +22,7 @@
 // (DOM real ainda não validado).
 
 import { withTimeout } from "./tools/timeout";
+import { transcribePcm16k } from "./whatsapp-transcription";
 import { getWhatsAppWindow } from "./whatsapp-window";
 
 export interface WhatsAppChatSummary {
@@ -36,6 +37,20 @@ export interface WhatsAppMessage {
   text: string;
   /** Texto cru mostrado na UI (ex. "14:32") — o WhatsApp Web não expõe um timestamp ISO real no DOM. */
   timeLabel: string | null;
+  /** "audio" = mensagem de voz — `text` só vem preenchido quando `readMessages` foi chamado com `transcribeAudio: true` (aí é a transcrição, ver `whatsapp-transcription.ts`). */
+  kind: "text" | "audio";
+  /** Só relevante quando `kind === "audio"`: true = `text` é uma transcrição de verdade; false = pedida mas não foi possível (áudio não encontrado, longo demais, falha do motor). `undefined` = transcrição nem foi pedida. */
+  transcribed?: boolean;
+}
+
+/** Forma crua que volta do navegador ANTES da transcrição — `audioBase64` nunca escapa desta camada (vira `text` ou é descartado). */
+interface RawWhatsAppMessage {
+  fromMe: boolean;
+  author: string | null;
+  text: string;
+  timeLabel: string | null;
+  kind: "text" | "audio";
+  audioBase64?: string | null;
 }
 
 export type WhatsAppActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -126,7 +141,10 @@ const JS_HELPERS = `
   }
 `;
 
-async function runInWhatsApp<T>(script: string): Promise<WhatsAppActionResult<T>> {
+async function runInWhatsApp<T>(
+  script: string,
+  timeoutMs = ACTION_TIMEOUT_MS,
+): Promise<WhatsAppActionResult<T>> {
   const window = getWhatsAppWindow();
   try {
     const result = (await withTimeout(
@@ -140,7 +158,7 @@ async function runInWhatsApp<T>(script: string): Promise<WhatsAppActionResult<T>
         }
       })();
     `),
-      ACTION_TIMEOUT_MS,
+      timeoutMs,
       "whatsapp-action",
     )) as WhatsAppActionResult<T>;
     return result;
@@ -148,6 +166,66 @@ async function runInWhatsApp<T>(script: string): Promise<WhatsAppActionResult<T>
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
+
+// Fase J, extensão (pedido explícito da Jheny, 2026-09-03) — extrai o
+// áudio de uma mensagem de voz JÁ DENTRO da própria janela do WhatsApp
+// (fetch de um `blob:` só funciona no mesmo contexto de página que o
+// criou), decodifica e reamostra pra PCM 16kHz mono (formato que o
+// Whisper espera), devolve como base64 — nunca grava nada em disco
+// aqui, é tudo em memória dentro da própria página.
+//
+// Aviso de honestidade, mesmo padrão do resto do arquivo: os seletores
+// usados pra achar o elemento `<audio>`/botão de tocar (`data-testid`
+// "audio-play") são inferidos de padrões publicamente conhecidos do
+// WhatsApp Web, nunca confirmados contra uma mensagem de voz real.
+const AUDIO_EXTRACT_HELPER = `
+  async function extractAudioBase64(bubble) {
+    let audioEl = bubble.querySelector('audio');
+    if (!audioEl || !audioEl.src) {
+      const playBtn = bubble.querySelector('[data-testid="audio-play"], span[data-icon="audio-play"], button[aria-label*="ouvir" i], button[aria-label*="play" i]');
+      if (playBtn) {
+        playBtn.click();
+        try {
+          await waitForCondition(function () {
+            const el = bubble.querySelector('audio');
+            return !!(el && el.src);
+          }, 4000);
+        } catch (waitError) {
+          // segue sem áudio — quem chama trata audioBase64 nulo
+        }
+      }
+      audioEl = bubble.querySelector('audio');
+    }
+    if (!audioEl || !audioEl.src) return null;
+    try { audioEl.pause(); } catch (pauseError) { /* nunca deixa isso quebrar a extração */ }
+
+    const response = await fetch(audioEl.src);
+    const arrayBuffer = await response.arrayBuffer();
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContextCtor();
+    let decoded;
+    try {
+      decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+    } finally {
+      audioCtx.close();
+    }
+    const channelData = decoded.getChannelData(0);
+    const targetRate = 16000;
+    const ratio = decoded.sampleRate / targetRate;
+    const outLength = Math.max(1, Math.floor(channelData.length / ratio));
+    const resampled = new Float32Array(outLength);
+    for (let i = 0; i < outLength; i++) {
+      resampled[i] = channelData[Math.min(channelData.length - 1, Math.floor(i * ratio))];
+    }
+    const bytes = new Uint8Array(resampled.buffer);
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  }
+`;
 
 /** Lista as conversas visíveis na tela inicial (sem abrir nenhuma), mais recentes primeiro — ordem já dada pelo próprio WhatsApp Web. */
 export async function listChats(limit = 20): Promise<WhatsAppActionResult<WhatsAppChatSummary[]>> {
@@ -234,27 +312,112 @@ async function openChatInternal(chatName: string): Promise<WhatsAppActionResult<
   `);
 }
 
-/** Lê as últimas mensagens de uma conversa (abre a conversa primeiro se ainda não estiver aberta). */
-export async function readMessages(chatName: string, limit = 20): Promise<WhatsAppActionResult<WhatsAppMessage[]>> {
+// Áudio precisa de fetch+decode+reamostragem por clipe dentro da própria
+// página — mais lento que só ler texto, e a janela de leitura das
+// mensagens já pode ter reload/navegação disparados pelo mecanismo de
+// reconexão no meio do caminho (mesmo risco documentado em
+// `ACTION_TIMEOUT_MS`). Por isso um teto maior só quando pedido, e um
+// limite de quantos clipes extrai numa chamada só — sem isso, uma
+// conversa com muitos áudios travaria a leitura inteira por minutos.
+const AUDIO_READ_TIMEOUT_MS = 45000;
+const MAX_AUDIO_CLIPS_PER_READ = 15;
+
+function base64ToFloat32(base64: string): Float32Array {
+  const buffer = Buffer.from(base64, "base64");
+  return new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / Float32Array.BYTES_PER_ELEMENT);
+}
+
+/**
+ * Lê as últimas mensagens de uma conversa (abre a conversa primeiro se
+ * ainda não estiver aberta).
+ *
+ * `transcribeAudio` (pedido explícito da Jheny, 2026-09-03, extensão da
+ * Fase J): quando `true`, mensagem de voz também vem com `text`
+ * preenchido pela transcrição real (`whatsapp-transcription.ts`, 100%
+ * local — ver o comentário daquele arquivo pro porquê). `false` (padrão)
+ * mantém o comportamento de sempre — mais rápido, mensagem de voz só
+ * marcada como `kind: "audio"` com `text` vazio.
+ */
+export async function readMessages(
+  chatName: string,
+  limit = 20,
+  transcribeAudio = false,
+): Promise<WhatsAppActionResult<WhatsAppMessage[]>> {
   const opened = await openChatInternal(chatName);
   if (!opened.ok) return opened;
 
-  return runInWhatsApp<WhatsAppMessage[]>(`
+  const raw = await runInWhatsApp<RawWhatsAppMessage[]>(
+    `
+    ${transcribeAudio ? AUDIO_EXTRACT_HELPER : ""}
     const container = await waitFor('div[data-testid="conversation-panel-messages"]', ${READY_TIMEOUT_MS});
     const bubbles = Array.from(container.querySelectorAll('div.message-in, div.message-out')).slice(-${limit});
-    const messages = bubbles.map((bubble) => {
+    const wantAudio = ${transcribeAudio ? "true" : "false"};
+    const maxAudioClips = ${MAX_AUDIO_CLIPS_PER_READ};
+    let audioClipsExtracted = 0;
+    const messages = await Promise.all(bubbles.map(async (bubble) => {
       const textEl = bubble.querySelector('span.selectable-text, span[dir="ltr"]');
       const authorEl = bubble.querySelector('span[data-testid="author"], span[aria-label][dir="auto"]');
       const timeEl = bubble.querySelector('span[data-testid="msg-time"], span[dir="auto"] + span');
-      return {
+      const isAudio = !textEl && !!bubble.querySelector('[data-testid="audio-play"], audio, span[data-icon="audio-play"]');
+      const base = {
         fromMe: bubble.classList.contains('message-out'),
         author: authorEl ? authorEl.textContent || null : null,
         text: textEl ? textEl.textContent || '' : '',
         timeLabel: timeEl ? timeEl.textContent || null : null,
+        kind: isAudio ? 'audio' : 'text',
       };
-    });
+      if (isAudio && wantAudio && audioClipsExtracted < maxAudioClips) {
+        audioClipsExtracted++;
+        try {
+          base.audioBase64 = await extractAudioBase64(bubble);
+        } catch (extractError) {
+          base.audioBase64 = null;
+        }
+      }
+      return base;
+    }));
     return { ok: true, data: messages };
-  `);
+  `,
+    transcribeAudio ? AUDIO_READ_TIMEOUT_MS : ACTION_TIMEOUT_MS,
+  );
+  if (!raw.ok) return raw;
+
+  if (!transcribeAudio) {
+    return {
+      ok: true,
+      data: raw.data.map((m) => ({
+        fromMe: m.fromMe,
+        author: m.author,
+        text: m.text,
+        timeLabel: m.timeLabel,
+        kind: m.kind,
+      })),
+    };
+  }
+
+  // Transcrição roda sequencial (não paralela) de propósito — Whisper
+  // local é pesado de CPU; rodar vários clipes ao mesmo tempo só deixaria
+  // cada um mais lento sem ganhar nada. audioBase64 nunca sai desta
+  // função — vira `text` (transcrição) ou é descartado, nunca retorna
+  // pra quem chamou `readMessages`.
+  const messages: WhatsAppMessage[] = [];
+  for (const m of raw.data) {
+    if (m.kind !== "audio" || !m.audioBase64) {
+      messages.push({ fromMe: m.fromMe, author: m.author, text: m.text, timeLabel: m.timeLabel, kind: m.kind });
+      continue;
+    }
+    const samples = base64ToFloat32(m.audioBase64);
+    const result = await transcribePcm16k(samples);
+    messages.push({
+      fromMe: m.fromMe,
+      author: m.author,
+      text: result.text,
+      timeLabel: m.timeLabel,
+      kind: "audio",
+      transcribed: result.ok,
+    });
+  }
+  return { ok: true, data: messages };
 }
 
 /**

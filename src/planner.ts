@@ -56,7 +56,8 @@ const ARGS_HINTS: Record<string, string> = {
   // dica explícita, igual as outras ferramentas abaixo.
   whatsapp_list_chats: '{"limit": <número, opcional, padrão 20>}',
   whatsapp_search_chats: '{"query": "<nome do contato ou grupo>"}',
-  whatsapp_read_messages: '{"chatName": "<nome exato do contato ou grupo>", "limit": <número, opcional, padrão 20>}',
+  whatsapp_read_messages:
+    '{"chatName": "<nome exato do contato ou grupo>", "limit": <número, opcional, padrão 20>, "transcribeAudio": <true|false, opcional, padrão false — true só quando a usuária pedir explicitamente pra incluir, ouvir ou resumir mensagens de voz/áudio daquela conversa>}',
   whatsapp_send_message: '{"chatName": "<nome exato do contato ou grupo>", "text": "<texto da mensagem>"}',
 };
 
