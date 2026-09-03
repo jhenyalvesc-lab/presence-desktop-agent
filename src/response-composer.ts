@@ -36,6 +36,24 @@ function describeChats(chats: WhatsAppChatSummary[]): string {
   return `Encontrei: ${parts.join("; ")}${suffix}.`;
 }
 
+interface WhatsAppDaySummary {
+  summary: string;
+  messageCount: number;
+  dayLabel: string;
+  complete: boolean;
+}
+
+function describeDaySummary(summary: WhatsAppDaySummary): string {
+  if (summary.messageCount === 0) return summary.summary;
+  // "complete: false" = o scroll-back não confirmou ter achado o INÍCIO
+  // do dia (ver `readMessagesForDay`, whatsapp-actions.ts) — nunca
+  // esconde essa incerteza, fala com honestidade que pode ser parcial.
+  const caveat = summary.complete
+    ? ""
+    : " Só não tenho certeza se peguei a conversa inteira desse dia — pode faltar o começo.";
+  return `${summary.summary}${caveat}`;
+}
+
 function describeMessages(messages: WhatsAppMessage[]): string {
   if (messages.length === 0) return "Não encontrei mensagens nessa conversa.";
   const last = messages.slice(-MAX_ITEMS_SPOKEN);
@@ -61,6 +79,11 @@ function describeToolResult(tool: string, result: unknown): string | null {
     const action = result as WhatsAppActionResult<WhatsAppMessage[]> | undefined;
     if (action?.ok) return describeMessages(action.data);
     return action && !action.ok ? `Não consegui: ${action.error}` : null;
+  }
+  if (tool === "whatsapp_summarize_day") {
+    const action = result as WhatsAppActionResult<WhatsAppDaySummary> | undefined;
+    if (action?.ok) return describeDaySummary(action.data);
+    return action && !action.ok ? `Não consegui resumir: ${action.error}` : null;
   }
   if (tool === "whatsapp_send_message") {
     const action = result as WhatsAppActionResult<{ sent: boolean }> | undefined;

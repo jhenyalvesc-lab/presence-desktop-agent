@@ -327,6 +327,77 @@ function base64ToFloat32(base64: string): Float32Array {
   return new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / Float32Array.BYTES_PER_ELEMENT);
 }
 
+// Reaproveitado por `readMessages` e `readMessagesForDay` — mapeia
+// `<div class="message-in|message-out">` pro formato bruto (com áudio em
+// base64 quando pedido), sem repetir a lógica duas vezes.
+const MAP_BUBBLES_HELPER = `
+  async function mapBubbles(bubbles, wantAudio, maxAudioClips) {
+    let audioClipsExtracted = 0;
+    return Promise.all(bubbles.map(async (bubble) => {
+      const textEl = bubble.querySelector('span.selectable-text, span[dir="ltr"]');
+      const authorEl = bubble.querySelector('span[data-testid="author"], span[aria-label][dir="auto"]');
+      const timeEl = bubble.querySelector('span[data-testid="msg-time"], span[dir="auto"] + span');
+      const isAudio = !textEl && !!bubble.querySelector('[data-testid="audio-play"], audio, span[data-icon="audio-play"]');
+      const base = {
+        fromMe: bubble.classList.contains('message-out'),
+        author: authorEl ? authorEl.textContent || null : null,
+        text: textEl ? textEl.textContent || '' : '',
+        timeLabel: timeEl ? timeEl.textContent || null : null,
+        kind: isAudio ? 'audio' : 'text',
+      };
+      if (isAudio && wantAudio && audioClipsExtracted < maxAudioClips) {
+        audioClipsExtracted++;
+        try {
+          base.audioBase64 = await extractAudioBase64(bubble);
+        } catch (extractError) {
+          base.audioBase64 = null;
+        }
+      }
+      return base;
+    }));
+  }
+`;
+
+/**
+ * Transcrição roda sequencial (não paralela) de propósito — Whisper
+ * local é pesado de CPU; rodar vários clipes ao mesmo tempo só deixaria
+ * cada um mais lento sem ganhar nada. `audioBase64` nunca sai desta
+ * função — vira `text` (transcrição) ou é descartado.
+ */
+async function finalizeMessages(
+  raw: RawWhatsAppMessage[],
+  transcribeAudio: boolean,
+): Promise<WhatsAppMessage[]> {
+  if (!transcribeAudio) {
+    return raw.map((m) => ({
+      fromMe: m.fromMe,
+      author: m.author,
+      text: m.text,
+      timeLabel: m.timeLabel,
+      kind: m.kind,
+    }));
+  }
+
+  const messages: WhatsAppMessage[] = [];
+  for (const m of raw) {
+    if (m.kind !== "audio" || !m.audioBase64) {
+      messages.push({ fromMe: m.fromMe, author: m.author, text: m.text, timeLabel: m.timeLabel, kind: m.kind });
+      continue;
+    }
+    const samples = base64ToFloat32(m.audioBase64);
+    const result = await transcribePcm16k(samples);
+    messages.push({
+      fromMe: m.fromMe,
+      author: m.author,
+      text: result.text,
+      timeLabel: m.timeLabel,
+      kind: "audio",
+      transcribed: result.ok,
+    });
+  }
+  return messages;
+}
+
 /**
  * Lê as últimas mensagens de uma conversa (abre a conversa primeiro se
  * ainda não estiver aberta).
@@ -349,75 +420,136 @@ export async function readMessages(
   const raw = await runInWhatsApp<RawWhatsAppMessage[]>(
     `
     ${transcribeAudio ? AUDIO_EXTRACT_HELPER : ""}
+    ${MAP_BUBBLES_HELPER}
     const container = await waitFor('div[data-testid="conversation-panel-messages"]', ${READY_TIMEOUT_MS});
     const bubbles = Array.from(container.querySelectorAll('div.message-in, div.message-out')).slice(-${limit});
-    const wantAudio = ${transcribeAudio ? "true" : "false"};
-    const maxAudioClips = ${MAX_AUDIO_CLIPS_PER_READ};
-    let audioClipsExtracted = 0;
-    const messages = await Promise.all(bubbles.map(async (bubble) => {
-      const textEl = bubble.querySelector('span.selectable-text, span[dir="ltr"]');
-      const authorEl = bubble.querySelector('span[data-testid="author"], span[aria-label][dir="auto"]');
-      const timeEl = bubble.querySelector('span[data-testid="msg-time"], span[dir="auto"] + span');
-      const isAudio = !textEl && !!bubble.querySelector('[data-testid="audio-play"], audio, span[data-icon="audio-play"]');
-      const base = {
-        fromMe: bubble.classList.contains('message-out'),
-        author: authorEl ? authorEl.textContent || null : null,
-        text: textEl ? textEl.textContent || '' : '',
-        timeLabel: timeEl ? timeEl.textContent || null : null,
-        kind: isAudio ? 'audio' : 'text',
-      };
-      if (isAudio && wantAudio && audioClipsExtracted < maxAudioClips) {
-        audioClipsExtracted++;
-        try {
-          base.audioBase64 = await extractAudioBase64(bubble);
-        } catch (extractError) {
-          base.audioBase64 = null;
-        }
-      }
-      return base;
-    }));
+    const messages = await mapBubbles(bubbles, ${transcribeAudio ? "true" : "false"}, ${MAX_AUDIO_CLIPS_PER_READ});
     return { ok: true, data: messages };
   `,
     transcribeAudio ? AUDIO_READ_TIMEOUT_MS : ACTION_TIMEOUT_MS,
   );
   if (!raw.ok) return raw;
+  return { ok: true, data: await finalizeMessages(raw.data, transcribeAudio) };
+}
 
-  if (!transcribeAudio) {
-    return {
-      ok: true,
-      data: raw.data.map((m) => ({
-        fromMe: m.fromMe,
-        author: m.author,
-        text: m.text,
-        timeLabel: m.timeLabel,
-        kind: m.kind,
-      })),
-    };
+// Fase de resumo por dia (pedido explícito da Jheny, 2026-09-03): "resume
+// a conversa de dois dias atrás, toda a conversa" — diferente de
+// `readMessages` (últimas N mensagens), aqui é preciso rolar a conversa
+// pra trás até achar TODAS as mensagens de um dia específico. O WhatsApp
+// Web mostra um separador de dia ("HOJE"/"ONTEM"/"13 DE SETEMBRO DE 2026")
+// acima do primeiro bloco de mensagens de cada dia — usado aqui tanto
+// pra saber quando já rolou o suficiente quanto pra recortar só as
+// mensagens do dia pedido.
+//
+// Aviso de honestidade, mesmo padrão do resto do arquivo: o formato
+// exato desses separadores (maiúsculo, "DE" entre dia/mês/ano) é
+// inferido do padrão conhecido do WhatsApp Web em português — nunca
+// confirmado contra uma sessão real. Se a Meta mudar esse texto (ou o
+// idioma da conta não for português), a detecção de dia simplesmente não
+// encontra nada e a função devolve erro explícito, nunca um resultado
+// errado silencioso.
+const DAY_SEPARATOR_HELPER = `
+  const MONTHS_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  function computeDayLabel(daysAgo) {
+    if (daysAgo === 0) return 'HOJE';
+    if (daysAgo === 1) return 'ONTEM';
+    const d = new Date();
+    d.setDate(d.getDate() - daysAgo);
+    return d.getDate() + ' DE ' + MONTHS_PT[d.getMonth()].toUpperCase() + ' DE ' + d.getFullYear();
   }
+  function isDaySeparatorText(text) {
+    const t = (text || '').trim().toUpperCase();
+    if (t === 'HOJE' || t === 'ONTEM') return true;
+    return /^\\d{1,2} DE [A-ZÇÁÉÍÓÚÂÊÔÃÕ]+ DE \\d{4}$/.test(t);
+  }
+  function findDaySeparators(root) {
+    const all = Array.from(root.querySelectorAll('*'));
+    return all.filter((el) => el.children.length === 0 && isDaySeparatorText(el.textContent));
+  }
+`;
 
-  // Transcrição roda sequencial (não paralela) de propósito — Whisper
-  // local é pesado de CPU; rodar vários clipes ao mesmo tempo só deixaria
-  // cada um mais lento sem ganhar nada. audioBase64 nunca sai desta
-  // função — vira `text` (transcrição) ou é descartado, nunca retorna
-  // pra quem chamou `readMessages`.
-  const messages: WhatsAppMessage[] = [];
-  for (const m of raw.data) {
-    if (m.kind !== "audio" || !m.audioBase64) {
-      messages.push({ fromMe: m.fromMe, author: m.author, text: m.text, timeLabel: m.timeLabel, kind: m.kind });
-      continue;
+const SCROLL_MAX_ITERATIONS = 25;
+const SCROLL_BUDGET_MS = 15000;
+const SCROLL_WAIT_MS = 700;
+const DAY_READ_TIMEOUT_MS = 60000;
+
+/**
+ * Lê TODAS as mensagens de um dia específico de uma conversa (0 = hoje,
+ * 1 = ontem, 2 = anteontem...), rolando pra trás até achar o começo do
+ * dia pedido (ou até esgotar o orçamento de tentativas — nesse caso
+ * `complete: false` no resultado, honesto sobre não ter certeza de ter
+ * pego a conversa inteira).
+ */
+export async function readMessagesForDay(
+  chatName: string,
+  daysAgo: number,
+  transcribeAudio = false,
+): Promise<WhatsAppActionResult<{ messages: WhatsAppMessage[]; dayLabel: string; complete: boolean }>> {
+  const opened = await openChatInternal(chatName);
+  if (!opened.ok) return opened;
+
+  const raw = await runInWhatsApp<{ messages: RawWhatsAppMessage[]; dayLabel: string; complete: boolean }>(
+    `
+    ${transcribeAudio ? AUDIO_EXTRACT_HELPER : ""}
+    ${MAP_BUBBLES_HELPER}
+    ${DAY_SEPARATOR_HELPER}
+    const container = await waitFor('div[data-testid="conversation-panel-messages"]', ${READY_TIMEOUT_MS});
+    const targetLabel = computeDayLabel(${daysAgo});
+    const scrollStart = Date.now();
+    let complete = false;
+    for (let i = 0; i < ${SCROLL_MAX_ITERATIONS} && Date.now() - scrollStart < ${SCROLL_BUDGET_MS}; i++) {
+      const seps = findDaySeparators(container);
+      const targetIndex = seps.findIndex((el) => el.textContent.trim().toUpperCase() === targetLabel);
+      if (targetIndex > 0) { complete = true; break; }
+      const heightBefore = container.scrollHeight;
+      container.scrollTop = 0;
+      await new Promise((r) => setTimeout(r, ${SCROLL_WAIT_MS}));
+      if (container.scrollHeight === heightBefore && container.scrollTop === 0) {
+        if (targetIndex === 0) complete = true;
+        break;
+      }
     }
-    const samples = base64ToFloat32(m.audioBase64);
-    const result = await transcribePcm16k(samples);
-    messages.push({
-      fromMe: m.fromMe,
-      author: m.author,
-      text: result.text,
-      timeLabel: m.timeLabel,
-      kind: "audio",
-      transcribed: result.ok,
+
+    const seps = findDaySeparators(container);
+    const bubbles = Array.from(container.querySelectorAll('div.message-in, div.message-out'));
+    const targetSep = seps.find((el) => el.textContent.trim().toUpperCase() === targetLabel);
+    if (!targetSep) {
+      return { ok: false, error: 'não encontrei mensagens de "' + targetLabel + '" nesta conversa (ou a data não carregou a tempo)' };
+    }
+
+    // Junta bubbles + separadores numa lista só, em ordem de documento,
+    // pra saber a qual dia cada bubble pertence (o separador mais recente
+    // visto ANTES dele, andando de cima pra baixo).
+    const marked = bubbles.map((el) => ({ el: el, type: 'bubble' }))
+      .concat(seps.map((el) => ({ el: el, type: 'sep', label: el.textContent.trim().toUpperCase() })));
+    marked.sort((a, b) => {
+      const pos = a.el.compareDocumentPosition(b.el);
+      if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+      if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+      return 0;
     });
-  }
-  return { ok: true, data: messages };
+    let current = null;
+    const dayBubbles = [];
+    for (const item of marked) {
+      if (item.type === 'sep') { current = item.label; continue; }
+      if (current === targetLabel) dayBubbles.push(item.el);
+    }
+
+    const messages = await mapBubbles(dayBubbles, ${transcribeAudio ? "true" : "false"}, ${MAX_AUDIO_CLIPS_PER_READ});
+    return { ok: true, data: { messages: messages, dayLabel: targetLabel, complete: complete } };
+  `,
+    DAY_READ_TIMEOUT_MS,
+  );
+  if (!raw.ok) return raw;
+
+  return {
+    ok: true,
+    data: {
+      messages: await finalizeMessages(raw.data.messages, transcribeAudio),
+      dayLabel: raw.data.dayLabel,
+      complete: raw.data.complete,
+    },
+  };
 }
 
 /**

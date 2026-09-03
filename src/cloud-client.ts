@@ -134,6 +134,38 @@ export async function requestPlan(command: string, tools: PlanToolDescriptor[]):
   return (await response.json()) as PlanResponse;
 }
 
+export interface SummarizeMessage {
+  fromMe: boolean;
+  author: string | null;
+  text: string;
+  kind: "text" | "audio";
+}
+
+/**
+ * Pedido explícito da Jheny (2026-09-03) — resumo de verdade de uma
+ * conversa do WhatsApp já lida (`whatsapp-actions.ts`), nunca o áudio em
+ * si (só texto, incluindo transcrição de áudio já feita localmente).
+ * Mesmo backend/mesma API da OpenAI que o Planner já usa — custo real
+ * de LLM, cobrado na conta configurada (`OPENAI_API_KEY`, nuvem), nunca
+ * de graça — ver `handle-agent-summarize-request.ts` (repositório
+ * principal) pro rate limit que protege contra custo descontrolado.
+ */
+export async function requestConversationSummary(
+  chatName: string,
+  dayLabel: string,
+  messages: SummarizeMessage[],
+): Promise<string> {
+  const headers = await authHeader();
+  const response = await fetch(`${CLOUD_BASE_URL}/api/presence/agent/summarize`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({ chatName, dayLabel, messages }),
+  });
+  if (!response.ok) throw new Error(`presence-agent/summarize-failed-${response.status}`);
+  const body = (await response.json()) as { summary: string };
+  return body.summary;
+}
+
 export interface AuditEntryPayload {
   tool: string;
   args?: unknown;

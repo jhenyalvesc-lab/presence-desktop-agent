@@ -12,7 +12,8 @@
 // correta de risco por ferramenta, que o Execution Engine já aplica
 // pra qualquer ferramenta.
 
-import { readMessages, searchChats, sendMessage, listChats } from "../whatsapp-actions";
+import { requestConversationSummary } from "../cloud-client";
+import { readMessages, readMessagesForDay, searchChats, sendMessage, listChats } from "../whatsapp-actions";
 import { getWhatsAppConnectionStatus } from "../whatsapp-window";
 import { registerTool } from "./registry";
 
@@ -45,6 +46,56 @@ registerTool({
     "Lê as últimas mensagens de uma conversa do WhatsApp, pelo nome do contato/grupo. Com transcribeAudio=true, também transcreve mensagens de voz (100% local, mais lento — só usar quando a usuária pedir explicitamente pra incluir/resumir áudios).",
   run: (args: { chatName: string; limit?: number; transcribeAudio?: boolean }) =>
     readMessages(args.chatName, args.limit ?? 20, args.transcribeAudio ?? false),
+});
+
+// Pedido explícito da Jheny (2026-09-03): "resume a conversa de dois
+// dias atrás, quero que resuma toda a conversa" — diferente de
+// `whatsapp_read_messages` (últimas N mensagens), aqui é o dia inteiro
+// (rola a conversa pra trás até achar o começo do dia, ver
+// `readMessagesForDay` em `whatsapp-actions.ts`), sempre com áudio
+// transcrito, e um resumo de verdade via LLM
+// (`requestConversationSummary`, mesma API da OpenAI que o Planner já
+// usa — custo real, pequeno, mas não é de graça).
+registerTool({
+  name: "whatsapp_summarize_day",
+  riskTier: "read_only",
+  description:
+    "Resume TODA a conversa de um dia específico do WhatsApp (daysAgo: 0 = hoje, 1 = ontem, 2 = anteontem...), incluindo mensagens de voz transcritas. Chamada real a um LLM (custo pequeno, cobrado na conta configurada) — só usar quando a usuária pedir explicitamente um resumo de um dia inteiro; pra ler só as últimas mensagens, use whatsapp_read_messages.",
+  run: async (args: { chatName: string; daysAgo: number }) => {
+    const read = await readMessagesForDay(args.chatName, args.daysAgo, true);
+    if (!read.ok) return read;
+
+    if (read.data.messages.length === 0) {
+      return {
+        ok: true,
+        data: {
+          summary: `Não encontrei mensagens de ${read.data.dayLabel.toLowerCase()} nessa conversa.`,
+          messageCount: 0,
+          dayLabel: read.data.dayLabel,
+          complete: read.data.complete,
+        },
+      };
+    }
+
+    try {
+      const summary = await requestConversationSummary(
+        args.chatName,
+        read.data.dayLabel,
+        read.data.messages.map((m) => ({ fromMe: m.fromMe, author: m.author, text: m.text, kind: m.kind })),
+      );
+      return {
+        ok: true,
+        data: {
+          summary,
+          messageCount: read.data.messages.length,
+          dayLabel: read.data.dayLabel,
+          complete: read.data.complete,
+        },
+      };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
 });
 
 registerTool({
