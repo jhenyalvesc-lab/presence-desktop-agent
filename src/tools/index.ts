@@ -13,6 +13,7 @@ import "./git-tools";
 import "./github-tools";
 import "./claude-code-tools";
 import "./whatsapp-tools";
+import "./cloud-tools";
 
 export { getTool, listTools, registerTool } from "./registry";
 export type { RiskTier, ToolDefinition } from "./types";

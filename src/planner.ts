@@ -61,6 +61,36 @@ const ARGS_HINTS: Record<string, string> = {
   whatsapp_summarize_day:
     '{"chatName": "<nome exato do contato ou grupo>", "daysAgo": <número inteiro — 0 = hoje, 1 = ontem, 2 = anteontem, 3 = três dias atrás, etc.>}',
   whatsapp_send_message: '{"chatName": "<nome exato do contato ou grupo>", "text": "<texto da mensagem>"}',
+
+  // Ponte ao Agent Core da nuvem (2026-09-03, `tools/cloud-tools.ts`) —
+  // mesmas dicas de argumento do catálogo equivalente no repositório
+  // principal (`presence-agent-tools.ts`), reaproveitadas de propósito.
+  create_task:
+    '{"title": "<título>", "priority": "alta|média|baixa (opcional)", "dueAt": "<ISO local, opcional>"}',
+  update_task:
+    '{"taskId": "<id>", "title": "<opcional>", "status": "pending|in_progress|done (opcional)", "dueAt": "<ISO local, opcional>"}',
+  delete_task: '{"taskId": "<id>"}',
+  create_habit: '{"name": "<nome>", "targetTime": "HH:mm (opcional)"}',
+  update_habit: '{"habitId": "<id>", "name": "<opcional>", "targetTime": "HH:mm (opcional)"}',
+  delete_habit: '{"habitId": "<id>"}',
+  create_calendar_event:
+    '{"title": "<título>", "startAt": "<ISO local>", "endAt": "<ISO local>", "location": "<opcional>"}',
+  update_calendar_event:
+    '{"eventId": "<id>", "title": "<opcional>", "startAt": "<ISO local, opcional>", "endAt": "<ISO local, opcional>", "location": "<opcional>"}',
+  delete_calendar_event: '{"eventId": "<id>"}',
+  create_transaction:
+    '{"type": "income|expense", "amount": <número>, "description": "<descrição>", "category": "<opcional>"}',
+  update_transaction:
+    '{"transactionId": "<id>", "amount": <número, opcional>, "description": "<opcional>", "category": "<opcional>"}',
+  delete_transaction: '{"transactionId": "<id>"}',
+  create_memory_note: '{"content": "<conteúdo>", "projectName": "<opcional>", "entityName": "<opcional>"}',
+  update_memory_note: '{"noteId": "<id>", "content": "<novo conteúdo>"}',
+  delete_memory_note: '{"noteId": "<id>"}',
+  create_reminder_rule:
+    '{"sourceKind": "task|habit|event", "sourceId": "<id>", "offsetsMinutes": [<minutos antes, ex.: 10080 p/ 1 semana, 4320 p/ 3 dias, 1440 p/ 1 dia, 0 p/ na hora>]}',
+  clear_reminder_rules: '{"sourceKind": "task|habit|event", "sourceId": "<id>"}',
+  cancel_follow_up: '{"message": "<trecho da mensagem do lembrete>"}',
+  search_web: '{"query": "<termo>"}',
 };
 
 function buildToolCatalog(): PlanToolDescriptor[] {

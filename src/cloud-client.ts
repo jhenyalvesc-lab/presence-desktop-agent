@@ -166,6 +166,34 @@ export async function requestConversationSummary(
   return body.summary;
 }
 
+export type CloudToolOutcome =
+  | { ok: true; result: unknown }
+  | { ok: false; error: string };
+
+/**
+ * Ponte Desktop Agent ↔ Agent Core da nuvem (2026-09-03, pedido explícito
+ * da Jheny: "quero que ele faça tudo o que o online faz dentro do
+ * desktop"). Executa de verdade UMA ferramenta do catálogo de nuvem
+ * (`src/tools/cloud-tools.ts`) — diferente de `requestPlan` (só propõe
+ * passos), aqui já é a execução real, autenticada por credencial de
+ * dispositivo (o mesmo `userId` que o chat do site usaria, resolvido no
+ * backend a partir do pareamento — nunca um id que o próprio agente
+ * escolhe). A confirmação de ações `destructive`/`external_comm` já
+ * aconteceu ANTES desta chamada (Execution Engine local, mesmo Permission
+ * Manager de qualquer outra ferramenta) — ver `handle-agent-execute-request.ts`
+ * (repositório principal) pro porquê disso ser seguro executar direto.
+ */
+export async function executeCloudTool(tool: string, args: unknown): Promise<CloudToolOutcome> {
+  const headers = await authHeader();
+  const response = await fetch(`${CLOUD_BASE_URL}/api/presence/agent/execute`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({ tool, args }),
+  });
+  if (!response.ok) throw new Error(`presence-agent/execute-failed-${response.status}`);
+  return (await response.json()) as CloudToolOutcome;
+}
+
 export interface AuditEntryPayload {
   tool: string;
   args?: unknown;
