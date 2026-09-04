@@ -46,6 +46,18 @@ export function showPresenceAppWindow(): void {
     callback(permission === "media" && webContents.id === window.webContents.id);
   });
 
+  // O Chromium guarda o nível de zoom por origem e reaplica sozinho na
+  // próxima vez que a mesma URL carrega — sem isso, um pinch-zoom
+  // acidental (trackpad) numa sessão fica valendo pra sempre nas
+  // próximas aberturas do app (reportado pela Jheny: "já abre em 50%").
+  // Trava em 100% sempre que a página termina de carregar, e desliga o
+  // pinch-zoom (visual zoom) — ele só amplia pixels sem reajustar o
+  // layout, o que deixa o orbe (WebGL) borrado/distorcido.
+  window.webContents.on("did-finish-load", () => {
+    window.webContents.setZoomFactor(1);
+    window.webContents.setVisualZoomLevelLimits(1, 1);
+  });
+
   void appWindow.loadURL(CLOUD_BASE_URL);
 
   appWindow.on("closed", () => {
