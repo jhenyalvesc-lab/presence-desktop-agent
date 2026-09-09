@@ -40,6 +40,19 @@
       "assets/**/*",
       "package.json"
     ],
+    "asarUnpack": [
+      "**/*.node",
+      "**/node_modules/tesseract.js/**",
+      "**/node_modules/tesseract.js-core/**",
+      "**/node_modules/@xenova/transformers/**",
+      "**/node_modules/onnxruntime-node/**",
+      "**/node_modules/onnxruntime-web/**",
+      "**/node_modules/sharp/**",
+      "**/node_modules/@nut-tree-fork/**",
+      "**/node_modules/@picovoice/**",
+      "**/node_modules/node-window-manager/**",
+      "**/node_modules/extract-file-icon/**"
+    ],
     "directories": {
       "output": "release"
     },

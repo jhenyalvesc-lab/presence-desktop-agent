@@ -46,138 +46,159 @@ const HEALTHCHECK_CRON = process.env["PRESENCE_HEALTHCHECK_CRON"] ?? "*/15 * * *
 const COMMAND_POLL_INTERVAL_MS = Number(process.env["PRESENCE_COMMAND_POLL_INTERVAL_MS"] ?? "4000");
 const UPDATE_CHECK_CRON = process.env["PRESENCE_UPDATE_CHECK_CRON"] ?? "0 */6 * * *";
 
-void app.whenReady().then(() => {
-  createMainWindow(); // painel técnico de diagnóstico — nasce escondido (window.ts)
-  showPresenceAppWindow(); // interface completa do Presence — é o que a usuária espera ver ao abrir o app
-  createTray();
-  startAudioWorker();
-  startVoiceInteractionListener();
-  startCommandQueuePolling(COMMAND_POLL_INTERVAL_MS);
-  // Checagem inicial acontece dentro de initAutoUpdater(); o job agendado
-  // aqui só cobre o processo que fica rodando em segundo plano por dias
-  // (mesmo padrão de reaproveitar o Scheduler já existente, como o
-  // cloud-healthcheck logo abaixo).
-  initAutoUpdater();
-  scheduleJob("check-for-updates", UPDATE_CHECK_CRON, () => checkForUpdatesNow());
-  onUpdaterStatus((status) => getMainWindow()?.webContents.send("agent:update-status", status));
+// Correção (auditoria "Presence não abre", 2026-09-08) — sem lock de
+// instância única, cada tentativa de abrir o app (double-click, atalho,
+// autostart) criava um processo TOTALMENTE independente, nenhum deles
+// encerrando os anteriores (fechar a janela nunca mata o processo, por
+// design — ver `window-all-closed` abaixo); numa máquina real isso
+// acumulou dezenas de processos "Presence" fantasmas em segundo plano,
+// todos competindo pelo mesmo microfone/sessão do WhatsApp/pareamento,
+// sem janela nenhuma visível. `requestSingleInstanceLock` garante que só
+// a PRIMEIRA instância continua de verdade — qualquer tentativa seguinte
+// (`second-instance`) só traz a janela já existente pra frente e encerra
+// a instância nova, nunca deixa duas rodando.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
-  onAudioStatus((status) => getMainWindow()?.webContents.send("agent:audio-status", status));
-  onWakeDetected((event) => getMainWindow()?.webContents.send("agent:wake-detected", event));
-  onClapDetected((event) => getMainWindow()?.webContents.send("agent:clap-detected", event));
-  onVoiceInteractionState((state) => getMainWindow()?.webContents.send("agent:voice-state", state));
-  onCommandCaptured((event) => getMainWindow()?.webContents.send("agent:command-captured", event));
-  onCommandResolution((resolution) => getMainWindow()?.webContents.send("agent:command-resolved", resolution));
-  onPlannerResolution((resolution) => getMainWindow()?.webContents.send("agent:planner-resolved", resolution));
-  // Não existe API de áudio no Main Process — o Renderer é quem toca de
-  // verdade (ver renderer/renderer.js), este só encaminha os bytes.
-  onSpeechAudioReady((base64Mp3) => getMainWindow()?.webContents.send("agent:speech-audio", base64Mp3));
-
-  onCommandQueueStatus((status, detail) => getMainWindow()?.webContents.send("agent:command-queue-status", { status, detail }));
-  onCommandReceived((event) => getMainWindow()?.webContents.send("agent:command-queue-received", event));
-  onCommandCompleted((event) => getMainWindow()?.webContents.send("agent:command-queue-completed", event));
-
-  onConfirmationRequested((request) => {
-    showMainWindow(); // uma ação precisando de confirmação sempre traz a janela pra frente — nunca fica escondida esperando resposta
-    getMainWindow()?.webContents.send("agent:confirmation-request", request);
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    showPresenceAppWindow();
   });
-  onAuditEntry((entry) => getMainWindow()?.webContents.send("agent:audit-appended", entry));
 
-  // Primeira automação real do Scheduler: prova o disparo local
-  // reaproveitando o contrato de nuvem já existente (ping), sem
-  // inventar um endpoint novo. Sincronizar calendário/lembretes reais
-  // (Fase 9) exigiria um endpoint autenticado por dispositivo que
-  // ainda não existe — sinalizado nos docs, não fabricado aqui.
-  scheduleJob("cloud-healthcheck", HEALTHCHECK_CRON, async () => {
-    try {
-      await pingCloud();
-    } catch (error) {
-      await executeTool("show_notification", {
-        title: "Presence Desktop Agent",
-        body: "Não consegui falar com a nuvem do Presence agora.",
-      });
-      throw error;
-    }
-  });
-  onJobStatusChanged((status) => getMainWindow()?.webContents.send("agent:scheduler-status", status));
+  void app.whenReady().then(() => {
+    createMainWindow(); // painel técnico de diagnóstico — nasce escondido (window.ts)
+    showPresenceAppWindow(); // interface completa do Presence — é o que a usuária espera ver ao abrir o app
+    createTray();
+    startAudioWorker();
+    startVoiceInteractionListener();
+    startCommandQueuePolling(COMMAND_POLL_INTERVAL_MS);
+    // Checagem inicial acontece dentro de initAutoUpdater(); o job agendado
+    // aqui só cobre o processo que fica rodando em segundo plano por dias
+    // (mesmo padrão de reaproveitar o Scheduler já existente, como o
+    // cloud-healthcheck logo abaixo).
+    initAutoUpdater();
+    scheduleJob("check-for-updates", UPDATE_CHECK_CRON, () => checkForUpdatesNow());
+    onUpdaterStatus((status) => getMainWindow()?.webContents.send("agent:update-status", status));
 
-  // WhatsApp (Fase J): observa transições de status pra avisar quando a
-  // sessão cai — nunca tenta relogar sozinho (não há credencial que
-  // este código possa usar), só notifica pra a própria pessoa escanear
-  // o QR code de novo quando quiser.
-  startWhatsAppStatusWatcher();
-  onWhatsAppStatusChanged((status) => {
-    getMainWindow()?.webContents.send("agent:whatsapp-status-changed", status);
-    if (status === "disconnected") {
-      void executeTool("show_notification", {
-        title: "Presence — WhatsApp",
-        body: "O WhatsApp desconectou. Abra a janela do WhatsApp pra escanear o QR code de novo.",
-      });
-    }
-  });
-});
+    onAudioStatus((status) => getMainWindow()?.webContents.send("agent:audio-status", status));
+    onWakeDetected((event) => getMainWindow()?.webContents.send("agent:wake-detected", event));
+    onClapDetected((event) => getMainWindow()?.webContents.send("agent:clap-detected", event));
+    onVoiceInteractionState((state) => getMainWindow()?.webContents.send("agent:voice-state", state));
+    onCommandCaptured((event) => getMainWindow()?.webContents.send("agent:command-captured", event));
+    onCommandResolution((resolution) => getMainWindow()?.webContents.send("agent:command-resolved", resolution));
+    onPlannerResolution((resolution) => getMainWindow()?.webContents.send("agent:planner-resolved", resolution));
+    // Não existe API de áudio no Main Process — o Renderer é quem toca de
+    // verdade (ver renderer/renderer.js), este só encaminha os bytes.
+    onSpeechAudioReady((base64Mp3) => getMainWindow()?.webContents.send("agent:speech-audio", base64Mp3));
 
-app.on("before-quit", () => {
-  stopAudioWorker();
-  stopCommandQueuePolling();
-  stopWhatsAppStatusWatcher();
-});
+    onCommandQueueStatus((status, detail) => getMainWindow()?.webContents.send("agent:command-queue-status", { status, detail }));
+    onCommandReceived((event) => getMainWindow()?.webContents.send("agent:command-queue-received", event));
+    onCommandCompleted((event) => getMainWindow()?.webContents.send("agent:command-queue-completed", event));
 
-// Fechar a janela nunca encerra o agente (ver window.ts); no Windows,
-// "todas as janelas fechadas" também não deve encerrar o processo — só a
-// bandeja ("Encerrar") faz isso de verdade.
-app.on("window-all-closed", () => {
-  // intencionalmente vazio — o agente continua rodando em segundo plano.
-});
-
-ipcMain.handle("agent:get-status", async () => {
-  const credential = await loadDeviceCredential();
-  return { paired: credential !== null, deviceId: credential?.deviceId ?? null };
-});
-
-ipcMain.handle("agent:get-version", () => ({
-  version: app.getVersion(),
-  packaged: app.isPackaged,
-  updateReady: isUpdateReady(),
-}));
-
-ipcMain.handle("agent:check-for-updates", () => checkForUpdatesNow());
-
-ipcMain.handle("agent:start-pairing", async (): Promise<PairingOutcome> => {
-  if (pairingInFlight) throw new Error("presence-agent/pairing-already-in-progress");
-  pairingInFlight = true;
-  try {
-    const session = await beginPairing();
-    const window = getMainWindow();
-    window?.webContents.send("agent:pairing-started", { code: session.code });
-    return await waitForApproval(session, (secondsLeft) => {
-      window?.webContents.send("agent:pairing-tick", secondsLeft);
+    onConfirmationRequested((request) => {
+      showMainWindow(); // uma ação precisando de confirmação sempre traz a janela pra frente — nunca fica escondida esperando resposta
+      getMainWindow()?.webContents.send("agent:confirmation-request", request);
     });
-  } finally {
-    pairingInFlight = false;
-  }
-});
+    onAuditEntry((entry) => getMainWindow()?.webContents.send("agent:audit-appended", entry));
 
-ipcMain.handle("agent:ping", () => pingCloud());
+    // Primeira automação real do Scheduler: prova o disparo local
+    // reaproveitando o contrato de nuvem já existente (ping), sem
+    // inventar um endpoint novo. Sincronizar calendário/lembretes reais
+    // (Fase 9) exigiria um endpoint autenticado por dispositivo que
+    // ainda não existe — sinalizado nos docs, não fabricado aqui.
+    scheduleJob("cloud-healthcheck", HEALTHCHECK_CRON, async () => {
+      try {
+        await pingCloud();
+      } catch (error) {
+        await executeTool("show_notification", {
+          title: "Presence Desktop Agent",
+          body: "Não consegui falar com a nuvem do Presence agora.",
+        });
+        throw error;
+      }
+    });
+    onJobStatusChanged((status) => getMainWindow()?.webContents.send("agent:scheduler-status", status));
 
-ipcMain.handle("agent:get-audio-status", () => getAudioStatus());
+    // WhatsApp (Fase J): observa transições de status pra avisar quando a
+    // sessão cai — nunca tenta relogar sozinho (não há credencial que
+    // este código possa usar), só notifica pra a própria pessoa escanear
+    // o QR code de novo quando quiser.
+    startWhatsAppStatusWatcher();
+    onWhatsAppStatusChanged((status) => {
+      getMainWindow()?.webContents.send("agent:whatsapp-status-changed", status);
+      if (status === "disconnected") {
+        void executeTool("show_notification", {
+          title: "Presence — WhatsApp",
+          body: "O WhatsApp desconectou. Abra a janela do WhatsApp pra escanear o QR code de novo.",
+        });
+      }
+    });
+  });
 
-ipcMain.handle("agent:set-autostart", (_event, enabled: boolean) => {
-  setAutostart(enabled);
-  return { enabled };
-});
+  app.on("before-quit", () => {
+    stopAudioWorker();
+    stopCommandQueuePolling();
+    stopWhatsAppStatusWatcher();
+  });
 
-ipcMain.on("agent:confirmation-response", (_event, id: string, approved: boolean) => {
-  respondToConfirmation(id, approved);
-});
+  // Fechar a janela nunca encerra o agente (ver window.ts); no Windows,
+  // "todas as janelas fechadas" também não deve encerrar o processo — só a
+  // bandeja ("Encerrar") faz isso de verdade.
+  app.on("window-all-closed", () => {
+    // intencionalmente vazio — o agente continua rodando em segundo plano.
+  });
 
-ipcMain.on("agent:speech-audio-ended", () => notifySpeechAudioEnded());
+  ipcMain.handle("agent:get-status", async () => {
+    const credential = await loadDeviceCredential();
+    return { paired: credential !== null, deviceId: credential?.deviceId ?? null };
+  });
 
-ipcMain.handle("agent:get-audit-log", () => getRecentAuditEntries());
+  ipcMain.handle("agent:get-version", () => ({
+    version: app.getVersion(),
+    packaged: app.isPackaged,
+    updateReady: isUpdateReady(),
+  }));
 
-ipcMain.handle("agent:get-scheduler-status", () => getJobStatuses());
+  ipcMain.handle("agent:check-for-updates", () => checkForUpdatesNow());
 
-// WhatsApp (roteiro original, "Fase J") — opt-in explícito, risco de
-// ToS aceito conscientemente pela Jheny antes desta implementação.
-ipcMain.handle("agent:whatsapp-show", () => showWhatsAppWindow());
-ipcMain.handle("agent:whatsapp-hide", () => hideWhatsAppWindow());
-ipcMain.handle("agent:whatsapp-status", () => getWhatsAppConnectionStatus());
+  ipcMain.handle("agent:start-pairing", async (): Promise<PairingOutcome> => {
+    if (pairingInFlight) throw new Error("presence-agent/pairing-already-in-progress");
+    pairingInFlight = true;
+    try {
+      const session = await beginPairing();
+      const window = getMainWindow();
+      window?.webContents.send("agent:pairing-started", { code: session.code });
+      return await waitForApproval(session, (secondsLeft) => {
+        window?.webContents.send("agent:pairing-tick", secondsLeft);
+      });
+    } finally {
+      pairingInFlight = false;
+    }
+  });
+
+  ipcMain.handle("agent:ping", () => pingCloud());
+
+  ipcMain.handle("agent:get-audio-status", () => getAudioStatus());
+
+  ipcMain.handle("agent:set-autostart", (_event, enabled: boolean) => {
+    setAutostart(enabled);
+    return { enabled };
+  });
+
+  ipcMain.on("agent:confirmation-response", (_event, id: string, approved: boolean) => {
+    respondToConfirmation(id, approved);
+  });
+
+  ipcMain.on("agent:speech-audio-ended", () => notifySpeechAudioEnded());
+
+  ipcMain.handle("agent:get-audit-log", () => getRecentAuditEntries());
+
+  ipcMain.handle("agent:get-scheduler-status", () => getJobStatuses());
+
+  // WhatsApp (roteiro original, "Fase J") — opt-in explícito, risco de
+  // ToS aceito conscientemente pela Jheny antes desta implementação.
+  ipcMain.handle("agent:whatsapp-show", () => showWhatsAppWindow());
+  ipcMain.handle("agent:whatsapp-hide", () => hideWhatsAppWindow());
+  ipcMain.handle("agent:whatsapp-status", () => getWhatsAppConnectionStatus());
+}
