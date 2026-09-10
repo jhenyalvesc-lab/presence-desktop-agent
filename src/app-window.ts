@@ -10,6 +10,18 @@
 //
 // Reaproveitada entre chamadas (nunca recriada) — só mostra/foca se já
 // existir, mesmo espírito de `window.ts`.
+//
+// Correção estrutural (reportado pela Jheny, 2026-09-10: "tudo que é
+// atualizado no site nunca é atualizado no Presence Desktop") — a
+// promessa do comentário acima ("sempre a versão mais atual") nunca foi
+// verdade na prática: o processo do app fica rodando em segundo plano
+// por dias (fechar a janela só esconde, nunca mata o processo — ver
+// window-all-closed em main.ts), então esta função quase sempre caía no
+// branch "já existe" — mostra/foca a MESMA página carregada da primeira
+// vez que o app abriu, sem nunca buscar a versão nova do site. Agora
+// recarrega toda vez que a janela é trazida à frente — o mesmo efeito de
+// apertar Ctrl+R, mas automático, sem a Jheny precisar lembrar disso a
+// cada deploy.
 
 import { BrowserWindow } from "electron";
 
@@ -19,8 +31,16 @@ let appWindow: BrowserWindow | null = null;
 
 export function showPresenceAppWindow(): void {
   if (appWindow) {
+    // Só recarrega quando a janela estava escondida/minimizada — ela vem
+    // de segundo plano, então buscar a versão nova agora é só um ganho,
+    // nunca uma perda. Se já está visível (a usuária clicou de novo em
+    // algo que chama esta função enquanto já está olhando pra ela, ex.:
+    // wake word duplicado), nunca recarrega por cima — isso jogaria fora
+    // o Voice Mode/conversa em andamento sem necessidade nenhuma.
+    const wasHidden = !appWindow.isVisible() || appWindow.isMinimized();
     appWindow.show();
     appWindow.focus();
+    if (wasHidden) void appWindow.loadURL(CLOUD_BASE_URL);
     return;
   }
 
