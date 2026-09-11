@@ -11,7 +11,7 @@
 // (ver IMPLEMENTATION_STATE.md do repositório principal) ficam para
 // fases futuras.
 
-import { app, ipcMain } from "electron";
+import { app, ipcMain, Menu } from "electron";
 
 import "./tools";
 
@@ -67,6 +67,12 @@ if (!gotSingleInstanceLock) {
   });
 
   void app.whenReady().then(() => {
+    // Pedido explícito da Jheny (2026-09-10): o menu padrão do Electron
+    // (File/Edit/View/Window/Help) não faz nada aqui — é só boilerplate
+    // que sobra por padrão em toda BrowserWindow. `null` remove pra
+    // sempre, em todas as janelas do app (a diagnóstico incluída).
+    Menu.setApplicationMenu(null);
+
     createMainWindow(); // painel técnico de diagnóstico — nasce escondido (window.ts)
     showPresenceAppWindow(); // interface completa do Presence — é o que a usuária espera ver ao abrir o app
     createTray();
